@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物理挑戰遊戲｜松山高中物理科</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+        .hall-container {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #38bdf8;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+        }
+        .game-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            transition: all 0.3s ease;
+        }
+        a.game-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent, #38bdf8);
+            box-shadow: 0 8px 25px rgba(56, 189, 248, 0.25);
+        }
+        .game-card.coming-soon { opacity: 0.55; }
+        .topic-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            padding: 0.15rem 0.6rem;
+            border-radius: 9999px;
+            border: 1px solid currentColor;
+        }
+        .star { color: #475569; }
+        .star.active { color: #fbbf24; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-5xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mt-6 mb-10">
+            <h1 class="orbitron text-4xl md:text-5xl font-bold text-cyan-400 mb-2">物理挑戰遊戲</h1>
+            <p class="orbitron text-xs md:text-sm tracking-widest text-cyan-600 mb-3">SSSH PHYSICS GAME SERIES</p>
+            <p class="text-slate-400">松山高中物理科 × 遊戲化學習｜選一座神殿，用物理解開它</p>
+        </div>
+
+        <!-- Overall progress -->
+        <div class="hall-container rounded-xl p-4 md:p-5 mb-8 flex flex-wrap items-center justify-between gap-3">
+            <div class="text-sm text-slate-300">🎖️ 你的冒險進度</div>
+            <div id="overall-progress" class="text-sm font-medium text-cyan-300">尚未開始——點進任一款遊戲展開挑戰</div>
+        </div>
+
+        <!-- Game cards -->
+        <div id="cards" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+
+        <p class="text-center text-slate-500 text-sm mt-10 mb-4">
+            進度儲存在這台裝置的瀏覽器中｜更多神殿籌備中
+        </p>
+    </div>
+
+    <script>
+    'use strict';
+
+    const STORE_KEY = 'sssh-physics-series-v1';
+    function loadStore() {
+        try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; }
+    }
+
+    const GAMES = [
+        {
+            id: 'chronotrain',
+            href: 'games/chronotrain.html',
+            icon: '🚄',
+            title: '時空軌跡修復者',
+            en: 'CHRONOTRAIN CONVERGENCE',
+            topic: '運動學｜等速與等加速度',
+            desc: '時空實驗室的異常波動扭曲了列車軌跡。調整速度與初速，讓兩列磁浮列車在目標點相遇，修復時空。',
+            accent: '#38bdf8',
+            accentText: 'text-cyan-400',
+            progress: (s) => {
+                const g = s.chronotrain;
+                if (!g || !g.stars) return null;
+                const starRow = (n) => '★'.repeat(n) + '<span class="star">' + '★'.repeat(3 - n) + '</span>';
+                const s1 = g.stars['1'] || 0, s2 = g.stars['2'] || 0;
+                if (s1 === 0 && s2 === 0) return null;
+                return '關卡一 <span class="text-amber-400">' + starRow(s1) + '</span>　關卡二 <span class="text-amber-400">' + starRow(s2) + '</span>';
+            }
+        },
+        {
+            id: 'temple',
+            href: 'games/uncertainty-temple.html',
+            icon: '🏛️',
+            title: '不確定度神殿挑戰',
+            en: 'THE TEMPLE OF UNCERTAINTY',
+            topic: '測量與不確定度｜誤差傳播',
+            desc: '解開五道量測密碼之謎——質量、尺寸、周長、密度與統計不確定度，奪取「量測真理之光」。',
+            accent: '#a5b4fc',
+            accentText: 'text-indigo-300',
+            progress: (s) => {
+                const g = s.temple;
+                if (!g) return null;
+                const parts = [];
+                if (g.bestTitle) parts.push('最佳稱號 ' + g.bestTitle);
+                if (!g.completed && g.completedChallenges > 0) parts.push('進行中 ' + g.completedChallenges + '/5');
+                else if (g.completed && !g.bestTitle) parts.push('已完成');
+                return parts.length ? parts.join('｜') : null;
+            }
+        },
+        {
+            id: 'waves',
+            href: 'games/ripple-sanctuary.html',
+            icon: '🌊',
+            title: '水之神殿：波之試煉',
+            en: 'RIPPLE SANCTUARY',
+            topic: '波動｜水波干涉',
+            desc: '古老的干涉之力封印了神殿核心。調控波源的頻率、間距與相位，重現目標干涉圖樣，穿越幻影水門。',
+            accent: '#7dd3fc',
+            accentText: 'text-sky-300',
+            progress: (s) => {
+                const g = s.waves;
+                if (!g) return null;
+                if (g.bestTitle) return '最佳稱號 ' + g.bestTitle;
+                if (g.maxLevel > 1) return '最高抵達 第' + ['一', '二', '三', '四'][g.maxLevel - 1] + '關';
+                return null;
+            }
+        },
+        {
+            id: 'photo',
+            href: 'games/photoelectric-temple.html',
+            icon: '🔆',
+            title: '光電之戰：古光神殿',
+            en: 'ANCIENT LIGHT TEMPLE',
+            topic: '近代物理｜光電效應',
+            desc: '調控光子能量與光強度，激發光電子、突破功函數與電位差的雙重封印，逃出古光神殿。',
+            accent: '#fbbf24',
+            accentText: 'text-amber-300',
+            progress: (s) => {
+                const g = s.photo;
+                if (!g) return null;
+                if (g.bestTitle) return '最佳稱號 「' + g.bestTitle + '」';
+                if (g.maxLevel > 1) return '最高抵達 第' + ['一', '二', '三', '四'][g.maxLevel - 1] + '關';
+                return null;
+            }
+        },
+        {
+            id: 'titans',
+            href: 'games/titans-mechanics.html',
+            icon: '⛰️',
+            title: '巨人神殿：生物力學之謎',
+            en: 'TITANS MECHANICS',
+            topic: '生物力學｜力矩與槓桿',
+            desc: '解開二頭肌、三頭肌、硬舉與阿基里斯腱的槓桿之謎，收集四枚符文，重啟神殿之心。',
+            accent: '#e2c285',
+            accentText: 'text-yellow-200',
+            progress: (s) => {
+                const g = s.titans;
+                if (!g) return null;
+                if (g.bestTitle) return '最佳稱號 「' + g.bestTitle + '」';
+                if (g.runes > 0) return '符文 ' + g.runes + '/4';
+                return null;
+            }
+        }
+    ];
+
+    function render() {
+        const store = loadStore();
+        const cards = document.getElementById('cards');
+        cards.innerHTML = '';
+
+        let anyProgress = false;
+        const summary = [];
+
+        GAMES.forEach(g => {
+            const prog = g.progress(store);
+            if (prog) { anyProgress = true; summary.push(g.icon + ' ' + prog); }
+
+            const inner =
+                '<div class="flex items-start justify-between mb-3">' +
+                    '<div class="text-4xl">' + g.icon + '</div>' +
+                    '<span class="topic-badge ' + g.accentText + '">' + g.topic + '</span>' +
+                '</div>' +
+                '<h2 class="orbitron text-xl font-bold mb-1 ' + g.accentText + '">' + g.title + '</h2>' +
+                '<p class="orbitron text-[10px] tracking-widest text-slate-500 mb-3">' + g.en + '</p>' +
+                '<p class="text-sm text-slate-300 leading-relaxed mb-4">' + g.desc + '</p>' +
+                '<div class="text-sm border-t border-slate-700 pt-3 ' + (prog ? 'text-slate-200' : 'text-slate-500') + '">' +
+                    (g.comingSoon ? '🚧 即將推出' : (prog || '尚未開始')) +
+                '</div>';
+
+            if (g.comingSoon) {
+                const div = document.createElement('div');
+                div.className = 'game-card coming-soon rounded-xl p-5';
+                div.innerHTML = inner;
+                cards.appendChild(div);
+            } else {
+                const a = document.createElement('a');
+                a.href = g.href;
+                a.className = 'game-card rounded-xl p-5 block';
+                a.style.setProperty('--accent', g.accent);
+                a.innerHTML = inner;
+                cards.appendChild(a);
+            }
+        });
+
+        if (anyProgress) {
+            document.getElementById('overall-progress').innerHTML = summary.join('　');
+        }
+    }
+
+    render();
+    // 從遊戲頁返回（bfcache）時刷新進度
+    window.addEventListener('pageshow', render);
+    </script>
+</body>
+</html>
