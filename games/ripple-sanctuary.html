@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>水之神殿：波之試煉</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #0a192f 0%, #203a63 100%);
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        .water-ripple {
+            background: radial-gradient(circle, rgba(0,212,255,0.2) 0%, rgba(0,212,255,0) 70%);
+            animation: ripple 2s infinite;
+        }
+        @keyframes ripple {
+            0% { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            background: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
+            border-radius: 4px;
+            outline: none;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #e0f2fe;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+        }
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #e0f2fe;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+        }
+        .temple-door {
+            background: #e0f2fe;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+            transition: all 0.8s ease;
+        }
+        .temple-door.open-left { transform: translateX(-100%); }
+        .temple-door.open-right { transform: translateX(100%); }
+        .glow { filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.8)); }
+        .wave-canvas {
+            background-color: rgba(6, 78, 129, 0.3);
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.3);
+        }
+        .btn { transition: all 0.3s ease; }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+        }
+        .btn:active { transform: translateY(1px); }
+        .level-indicator { transition: all 0.5s ease; }
+        .level-indicator.active {
+            background-color: #0ea5e9;
+            color: white;
+            transform: scale(1.05);
+        }
+        .fade-in { animation: fadeIn 0.8s ease forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .water-door-effect {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.4) 0%, rgba(56, 189, 248, 0) 70%);
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.5s ease;
+        }
+        .water-door-effect.active {
+            opacity: 1;
+            transform: scale(2);
+            box-shadow: 0 0 40px 20px rgba(224, 242, 254, 0.6);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <a href="../index.html" class="fixed top-3 left-3 z-[60] bg-sky-900/80 border border-sky-500 text-sky-100 text-sm px-3 py-1.5 rounded-full hover:bg-sky-800">◂ 系列大廳</a>
+
+    <!-- 遊戲容器 -->
+    <div id="game-container" class="container mx-auto px-4 py-6 max-w-6xl">
+        <!-- 標題區 -->
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-bold text-sky-100 mb-2 glow">水之神殿：波之試煉</h1>
+            <p id="level-title" class="text-xl text-sky-200">掌握頻率的節奏，喚醒沉睡的水之門！</p>
+        </header>
+
+        <!-- 關卡指示器 -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 text-center">
+            <div id="level-1" class="level-indicator active bg-sky-800 px-4 py-2 rounded-lg text-sky-100">第一關<br>水之節奏</div>
+            <div id="level-2" class="level-indicator bg-sky-900/50 px-4 py-2 rounded-lg text-sky-300/70">第二關<br>雙源之謎</div>
+            <div id="level-3" class="level-indicator bg-sky-900/50 px-4 py-2 rounded-lg text-sky-300/70">第三關<br>相位之謎</div>
+            <div id="level-4" class="level-indicator bg-sky-900/50 px-4 py-2 rounded-lg text-sky-300/70">第四關<br>幻影水門</div>
+        </div>
+
+        <!-- 計時器 (第三關和第四關才顯示) -->
+        <div id="timer-container" class="hidden mb-4 text-center">
+            <div class="inline-block bg-sky-900/80 px-4 py-2 rounded-lg">
+                <span class="text-sky-200">剩餘時間：</span>
+                <span id="timer" class="text-xl font-bold text-sky-100">100</span>
+                <span class="text-sky-200">秒</span>
+            </div>
+        </div>
+
+        <!-- 主遊戲區域 -->
+        <div class="flex flex-col gap-6">
+            <!-- 目標圖 -->
+            <div class="w-full">
+                <div class="bg-sky-900/30 p-4 rounded-lg border border-sky-700/50">
+                    <h2 class="text-xl font-bold text-sky-200 mb-3">目標干涉圖</h2>
+                    <div id="target-container" class="relative">
+                        <canvas id="target-canvas" class="wave-canvas w-full aspect-[4/1.2]"></canvas>
+                        <div id="target-wind-effect" class="absolute inset-0 bg-sky-900/80 flex items-center justify-center opacity-0 transition-opacity duration-500">
+                            <div class="text-center">
+                                <svg class="mx-auto h-12 w-12 text-sky-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                                </svg>
+                                <p class="mt-2 text-sky-200">風干擾中...</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="target-progress" class="mt-4">
+                        <div class="flex justify-between text-sm text-sky-300 mb-1">
+                            <span>目標進度</span>
+                            <span id="target-counter">1/1</span>
+                        </div>
+                        <div class="h-2 bg-sky-900/50 rounded-full overflow-hidden">
+                            <div id="target-progress-bar" class="h-full bg-sky-500 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作區和預覽 -->
+            <div class="w-full">
+                <div class="bg-sky-900/30 p-4 rounded-lg border border-sky-700/50">
+                    <h2 class="text-xl font-bold text-sky-200 mb-3">水波干涉控制台</h2>
+
+                    <!-- 預覽區 -->
+                    <div class="relative mb-6">
+                        <canvas id="preview-canvas" class="wave-canvas w-full aspect-[4/1.2]"></canvas>
+                        <div id="preview-wind-effect" class="absolute inset-0 bg-sky-900/80 flex items-center justify-center opacity-0 transition-opacity duration-500">
+                            <div class="text-center">
+                                <svg class="mx-auto h-12 w-12 text-sky-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                                </svg>
+                                <p class="mt-2 text-sky-200">風干擾中...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 控制區 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- 頻率控制 -->
+                        <div class="control-group">
+                            <label class="block text-sky-200 mb-2">頻率</label>
+                            <input type="range" id="frequency-slider" class="slider w-full mb-2" min="1" max="10" step="1" value="5">
+                            <div class="flex justify-between text-xs text-sky-300">
+                                <span>低頻</span>
+                                <span id="frequency-value">5</span>
+                                <span>高頻</span>
+                            </div>
+                        </div>
+
+                        <!-- 振幅控制 -->
+                        <div class="control-group">
+                            <label class="block text-sky-200 mb-2">振幅</label>
+                            <input type="range" id="amplitude-slider" class="slider w-full mb-2" min="1" max="10" step="1" value="5">
+                            <div class="flex justify-between text-xs text-sky-300">
+                                <span>弱</span>
+                                <span id="amplitude-value">5</span>
+                                <span>強</span>
+                            </div>
+                        </div>
+
+                        <!-- 波源間距控制 -->
+                        <div class="control-group">
+                            <label class="block text-sky-200 mb-2">波源間距</label>
+                            <input type="range" id="distance-slider" class="slider w-full mb-2" min="1" max="10" step="1" value="5">
+                            <div class="flex justify-between text-xs text-sky-300">
+                                <span>近</span>
+                                <span id="distance-value">5</span>
+                                <span>遠</span>
+                            </div>
+                        </div>
+
+                        <!-- 相位控制 -->
+                        <div class="control-group">
+                            <label class="block text-sky-200 mb-2">相位</label>
+                            <div class="flex gap-4">
+                                <button id="phase-same" class="btn flex-1 py-2 px-4 bg-sky-600 hover:bg-sky-500 text-white rounded-lg active">同相</button>
+                                <button id="phase-opposite" class="btn flex-1 py-2 px-4 bg-sky-800 hover:bg-sky-700 text-white rounded-lg">反相</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 顯示模式切換（依原設計隱藏，增強模式恆開）-->
+                    <div class="mt-6 flex items-center">
+                        <label class="inline-flex items-center cursor-pointer" style="display: none;">
+                            <input type="checkbox" id="enhanced-mode" class="sr-only peer">
+                            <div class="relative w-11 h-6 bg-sky-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
+                            <span class="ml-3 text-sm font-medium text-sky-200">增強顯示模式</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer ml-6" style="display: none;">
+                            <input type="checkbox" id="show-grid" class="sr-only peer" checked>
+                            <div class="relative w-11 h-6 bg-sky-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
+                            <span class="ml-3 text-sm font-medium text-sky-200">顯示網格</span>
+                        </label>
+                    </div>
+
+                    <!-- 提交按鈕 -->
+                    <div class="mt-6">
+                        <button id="submit-btn" class="btn w-full py-3 bg-sky-500 hover:bg-sky-400 text-white font-bold rounded-lg shadow-lg">
+                            提交答案
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 神殿之門 (過關動畫) -->
+        <div id="temple-door-container" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+            <div class="absolute inset-0 bg-black/70"></div>
+            <div class="relative w-full max-w-3xl flex">
+                <div class="water-door-effect"></div>
+                <div class="temple-door w-1/2 h-80"></div>
+                <div class="temple-door w-1/2 h-80"></div>
+            </div>
+        </div>
+
+        <!-- 開始畫面 -->
+        <div id="start-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-sky-900/95">
+            <div class="text-center p-8 max-w-2xl">
+                <div class="relative mb-8">
+                    <h1 class="text-5xl font-bold text-sky-100 mb-4 glow">水之神殿：波之試煉</h1>
+                    <div class="water-ripple absolute -inset-4 rounded-full"></div>
+                </div>
+                <p class="text-xl text-sky-200 mb-8">在神秘的水之神殿中，古老的干涉之力封印了通往核心的道路。<br>玩家必須理解水波的節奏、間距與相位，操控波源之力，<br>唤醒隱藏在水面下的節線密碼，才能穿越幻影水門，完成最終試煉！</p>
+                <button id="start-btn" class="btn px-8 py-4 bg-sky-500 hover:bg-sky-400 text-white text-xl font-bold rounded-lg shadow-lg">
+                    開始試煉
+                </button>
+                <p class="mt-8 text-sky-300 text-sm">設計：臺北市立松山高級中學 物理科 陳育詮</p>
+            </div>
+        </div>
+
+        <!-- 結束畫面 -->
+        <div id="end-screen" class="fixed inset-0 z-50 hidden items-center justify-center bg-sky-900/95">
+            <div class="text-center p-8 max-w-2xl">
+                <h1 id="end-title" class="text-4xl font-bold text-sky-100 mb-4 glow">試煉完成！</h1>
+                <p id="end-description" class="text-xl text-sky-200 mb-6">你已能靈活掌控波源之力，引領干涉光紋破開幻影之門！</p>
+                <div id="end-badge" class="mx-auto w-32 h-32 rounded-full bg-sky-700/50 border-4 border-sky-400 flex items-center justify-center mb-6">
+                    <span id="end-title-short" class="text-2xl font-bold text-sky-100">波紋引導者</span>
+                </div>
+                <p class="text-sky-300 mb-8">你的表現：<span id="end-performance">100秒內完成，失誤1次</span></p>
+                <button id="restart-btn" class="btn px-8 py-3 bg-sky-500 hover:bg-sky-400 text-white text-lg font-bold rounded-lg shadow-lg">
+                    重新挑戰
+                </button>
+                <p class="mt-8 text-sky-300 text-sm">設計：臺北市立松山高級中學 物理科 陳育詮</p>
+            </div>
+        </div>
+    </div>
+    <script>
+        'use strict';
+
+        // 遊戲狀態
+        const gameState = {
+            currentLevel: 1,
+            currentTarget: 0,
+            totalTargets: 1,
+            activeTargets: [],   // 本輪實際使用的目標（修復：不再回寫 levelSettings，重玩才會重新隨機）
+            phase: 'same',
+            enhancedMode: false,
+            showGrid: true,
+            timer: null,
+            timeLeft: 100,
+            windDisturbance: false,
+            windTimer: null,
+            mistakes: 0,
+            startTime: 0,
+            endTime: 0,
+            levelStarted: false,
+            animating: false      // 修復：門動畫期間鎖提交，防連點跳關
+        };
+
+        // ===== 系列進度（localStorage，與大廳共用）=====
+        const STORE_KEY = 'sssh-physics-series-v1';
+        function loadStore() {
+            try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; }
+        }
+        function saveSeriesProgress(patch) {
+            try {
+                const s = loadStore();
+                s.waves = Object.assign({}, s.waves, patch);
+                localStorage.setItem(STORE_KEY, JSON.stringify(s));
+            } catch (e) { /* 私密模式等情況下靜默略過 */ }
+        }
+
+        // 目標圖範本設定
+        const targetTemplates = [
+            // A: 頻率高 + 波源遠 + 同相 + 振幅強
+            { frequency: 9, amplitude: 8, distance: 8, phase: 'same' },
+            // B: 頻率低 + 波源近 + 同相 + 振幅弱
+            { frequency: 3, amplitude: 3, distance: 3, phase: 'same' },
+            // C: 頻率高 + 波源遠 + 反相 + 振幅中
+            { frequency: 8, amplitude: 5, distance: 8, phase: 'opposite' },
+            // D: 頻率低 + 波源遠 + 反相 + 振幅強
+            { frequency: 4, amplitude: 8, distance: 8, phase: 'opposite' },
+            // E: 頻率中 + 波源中 + 同相 + 振幅中
+            { frequency: 6, amplitude: 6, distance: 6, phase: 'same' },
+            // F: 頻率高 + 波源近 + 同相 + 振幅中
+            { frequency: 8, amplitude: 6, distance: 4, phase: 'same' },
+            // G: 頻率低 + 波源遠 + 同相 + 振幅弱
+            { frequency: 3, amplitude: 3, distance: 8, phase: 'same' },
+            // H: 頻率高 + 波源遠 + 反相 + 振幅強
+            { frequency: 9, amplitude: 9, distance: 9, phase: 'opposite' },
+            // I: 頻率低 + 波源近 + 反相 + 振幅中
+            { frequency: 3, amplitude: 5, distance: 3, phase: 'opposite' }
+        ];
+
+        // 關卡設定
+        const levelSettings = [
+            { targets: [0], hasWind: false, timeLimit: 0, title: "掌握頻率的節奏，喚醒沉睡的水之門！" },
+            { targets: [1, 2], hasWind: false, timeLimit: 0, title: "調和雙源之力，解開交織的水波密碼！" },
+            { targets: null, targetCount: 2, targetPool: [0, 1, 2, 3, 4], hasWind: true, timeLimit: 100, title: "辨識波之靈魂的相位，跨越幻影之門！" },
+            { targets: null, targetCount: 3, targetPool: [0, 1, 2, 3, 4, 5, 6, 7, 8], hasWind: true, timeLimit: 100, title: "集齊節奏、間距與相位之力，打開最深處的幻影水門！" }
+        ];
+
+        // 稱號系統
+        const titles = [
+            {
+                title: "水之律動大師", shortTitle: "律動大師",
+                description: "你已完全聽懂水之神殿的心跳，成為波動的主宰！",
+                condition: (time, mistakes) => time <= 80 && mistakes === 0
+            },
+            {
+                title: "波紋引導者", shortTitle: "波紋引導者",
+                description: "你已能靈活掌控波源之力，引領干涉光紋破開幻影之門！",
+                condition: (time, mistakes) => time <= 100 && mistakes <= 1
+            },
+            {
+                title: "節線探尋者", shortTitle: "節線探尋者",
+                description: "你在水之迷宮中穿梭，追尋干涉之路！",
+                condition: (time, mistakes) => mistakes <= 3
+            },
+            {
+                title: "漂流挑戰者", shortTitle: "漂流挑戰者",
+                description: "水波雖未聽從召喚，但你的勇氣值得讚賞！",
+                condition: (time, mistakes) => true
+            }
+        ];
+
+        // DOM元素
+        const elements = {
+            startScreen: document.getElementById('start-screen'),
+            endScreen: document.getElementById('end-screen'),
+            startBtn: document.getElementById('start-btn'),
+            restartBtn: document.getElementById('restart-btn'),
+            levelTitle: document.getElementById('level-title'),
+            timerContainer: document.getElementById('timer-container'),
+            timer: document.getElementById('timer'),
+            targetCanvas: document.getElementById('target-canvas'),
+            previewCanvas: document.getElementById('preview-canvas'),
+            targetCounter: document.getElementById('target-counter'),
+            targetProgressBar: document.getElementById('target-progress-bar'),
+            frequencySlider: document.getElementById('frequency-slider'),
+            frequencyValue: document.getElementById('frequency-value'),
+            amplitudeSlider: document.getElementById('amplitude-slider'),
+            amplitudeValue: document.getElementById('amplitude-value'),
+            distanceSlider: document.getElementById('distance-slider'),
+            distanceValue: document.getElementById('distance-value'),
+            phaseSame: document.getElementById('phase-same'),
+            phaseOpposite: document.getElementById('phase-opposite'),
+            enhancedMode: document.getElementById('enhanced-mode'),
+            showGrid: document.getElementById('show-grid'),
+            submitBtn: document.getElementById('submit-btn'),
+            templeDoorContainer: document.getElementById('temple-door-container'),
+            targetWindEffect: document.getElementById('target-wind-effect'),
+            previewWindEffect: document.getElementById('preview-wind-effect'),
+            endTitle: document.getElementById('end-title'),
+            endDescription: document.getElementById('end-description'),
+            endTitleShort: document.getElementById('end-title-short'),
+            endPerformance: document.getElementById('end-performance'),
+            levelIndicators: [
+                document.getElementById('level-1'),
+                document.getElementById('level-2'),
+                document.getElementById('level-3'),
+                document.getElementById('level-4')
+            ]
+        };
+
+        // 初始化畫布
+        const targetCtx = elements.targetCanvas.getContext('2d');
+        const previewCtx = elements.previewCanvas.getContext('2d');
+
+        // 調整畫布大小
+        function resizeCanvas() {
+            elements.targetCanvas.width = elements.targetCanvas.clientWidth;
+            elements.targetCanvas.height = elements.targetCanvas.clientHeight;
+            elements.previewCanvas.width = elements.previewCanvas.clientWidth;
+            elements.previewCanvas.height = elements.previewCanvas.clientHeight;
+            drawTargetWave();
+            drawPreviewWave();
+        }
+
+        // 初始化事件監聽
+        function initEventListeners() {
+            elements.startBtn.addEventListener('click', startGame);
+            elements.restartBtn.addEventListener('click', () => {
+                elements.endScreen.classList.remove('flex');
+                elements.endScreen.classList.add('hidden');
+                startGame();
+            });
+            elements.frequencySlider.addEventListener('input', updateFrequencyValue);
+            elements.amplitudeSlider.addEventListener('input', updateAmplitudeValue);
+            elements.distanceSlider.addEventListener('input', updateDistanceValue);
+            elements.phaseSame.addEventListener('click', () => setPhase('same'));
+            elements.phaseOpposite.addEventListener('click', () => setPhase('opposite'));
+            elements.enhancedMode.addEventListener('change', () => {
+                gameState.enhancedMode = elements.enhancedMode.checked;
+                drawPreviewWave();
+            });
+            elements.showGrid.addEventListener('change', () => {
+                gameState.showGrid = elements.showGrid.checked;
+                drawTargetWave();
+                drawPreviewWave();
+            });
+            elements.submitBtn.addEventListener('click', checkAnswer);
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        function updateFrequencyValue() {
+            elements.frequencyValue.textContent = parseInt(elements.frequencySlider.value);
+            requestPreviewRedraw();
+        }
+        function updateAmplitudeValue() {
+            elements.amplitudeValue.textContent = parseInt(elements.amplitudeSlider.value);
+            requestPreviewRedraw();
+        }
+        function updateDistanceValue() {
+            elements.distanceValue.textContent = parseInt(elements.distanceSlider.value);
+            requestPreviewRedraw();
+        }
+
+        // 效能：滑桿拖動時用 rAF 節流重繪（每幀最多算一次整張干涉圖）
+        let redrawPending = false;
+        function requestPreviewRedraw() {
+            if (redrawPending) return;
+            redrawPending = true;
+            requestAnimationFrame(() => {
+                redrawPending = false;
+                drawPreviewWave();
+            });
+        }
+
+        function setPhase(phase) {
+            gameState.phase = phase;
+            if (phase === 'same') {
+                elements.phaseSame.classList.add('active', 'bg-sky-600');
+                elements.phaseSame.classList.remove('bg-sky-800');
+                elements.phaseOpposite.classList.remove('active', 'bg-sky-600');
+                elements.phaseOpposite.classList.add('bg-sky-800');
+            } else {
+                elements.phaseOpposite.classList.add('active', 'bg-sky-600');
+                elements.phaseOpposite.classList.remove('bg-sky-800');
+                elements.phaseSame.classList.remove('active', 'bg-sky-600');
+                elements.phaseSame.classList.add('bg-sky-800');
+            }
+            drawPreviewWave();
+        }
+
+        // 開始遊戲
+        function startGame() {
+            elements.startScreen.classList.add('hidden');
+            gameState.currentLevel = 1;
+            gameState.mistakes = 0;
+            gameState.animating = false;
+            startLevel(1);
+        }
+
+        // 開始指定關卡
+        function startLevel(level) {
+            elements.levelIndicators.forEach((indicator, index) => {
+                indicator.classList.toggle('active', index + 1 === level);
+            });
+
+            gameState.currentLevel = level;
+            const levelSetting = levelSettings[level - 1];
+            elements.levelTitle.textContent = levelSetting.title;
+
+            // 設置目標（修復：隨機關卡每輪重新抽，不回寫設定檔）
+            if (levelSetting.targets) {
+                gameState.activeTargets = levelSetting.targets.slice();
+            } else {
+                const pool = [...levelSetting.targetPool];
+                gameState.activeTargets = [];
+                for (let i = 0; i < levelSetting.targetCount; i++) {
+                    const randomIndex = Math.floor(Math.random() * pool.length);
+                    gameState.activeTargets.push(pool[randomIndex]);
+                    pool.splice(randomIndex, 1);
+                    if (pool.length === 0) pool.push(...levelSetting.targetPool);
+                }
+            }
+            gameState.totalTargets = gameState.activeTargets.length;
+            gameState.currentTarget = 0;
+
+            elements.targetCounter.textContent = `1/${gameState.totalTargets}`;
+            elements.targetProgressBar.style.width = `${(1 / gameState.totalTargets) * 100}%`;
+
+            // 計時器
+            if (levelSetting.timeLimit > 0) {
+                elements.timerContainer.classList.remove('hidden');
+                gameState.timeLeft = levelSetting.timeLimit;
+                elements.timer.textContent = gameState.timeLeft;
+                if (gameState.timer) clearInterval(gameState.timer);
+                gameState.timer = setInterval(() => {
+                    gameState.timeLeft--;
+                    elements.timer.textContent = gameState.timeLeft;
+                    if (gameState.timeLeft <= 0) {
+                        clearInterval(gameState.timer);
+                        gameOver();
+                    }
+                }, 1000);
+            } else {
+                elements.timerContainer.classList.add('hidden');
+                if (gameState.timer) {
+                    clearInterval(gameState.timer);
+                    gameState.timer = null;
+                }
+            }
+
+            // 風干擾
+            if (levelSetting.hasWind) startWindDisturbance();
+            else stopWindDisturbance();
+
+            setTargetWave();
+            resetControls();
+
+            gameState.startTime = Date.now();
+            gameState.levelStarted = true;
+
+            // 系列進度：紀錄最高抵達關卡
+            const prevMax = (loadStore().waves || {}).maxLevel || 1;
+            saveSeriesProgress({ maxLevel: Math.max(prevMax, level) });
+        }
+
+        // 設置目標波形
+        function setTargetWave() {
+            const targetIndex = gameState.activeTargets[gameState.currentTarget];
+            const targetTemplate = targetTemplates[targetIndex];
+            elements.targetCanvas.dataset.frequency = targetTemplate.frequency;
+            elements.targetCanvas.dataset.amplitude = targetTemplate.amplitude;
+            elements.targetCanvas.dataset.distance = targetTemplate.distance;
+            elements.targetCanvas.dataset.phase = targetTemplate.phase;
+            drawTargetWave();
+        }
+
+        // 重置控制項（修復：逐一避開該參數的目標值，原版誤用「同時接近三者」條件，可能直接開在正解上）
+        function resetControls() {
+            const targetTemplate = targetTemplates[gameState.activeTargets[gameState.currentTarget]];
+            elements.frequencySlider.value = randomAvoid(1, 10, targetTemplate.frequency);
+            elements.amplitudeSlider.value = randomAvoid(1, 10, targetTemplate.amplitude);
+            elements.distanceSlider.value = randomAvoid(1, 10, targetTemplate.distance);
+            updateFrequencyValue();
+            updateAmplitudeValue();
+            updateDistanceValue();
+            setPhase(Math.random() > 0.5 ? 'same' : 'opposite');
+            drawPreviewWave();
+        }
+
+        // 取隨機值並避開目標值 ±1
+        function randomAvoid(min, max, avoid) {
+            let value;
+            do {
+                value = Math.floor(min + Math.random() * (max - min + 1));
+            } while (Math.abs(value - avoid) < 2);
+            return value;
+        }
+
+        // 繪製目標波形
+        function drawTargetWave() {
+            if (!elements.targetCanvas.width) return;
+            if (!elements.targetCanvas.dataset.frequency) return; // 尚未載入關卡
+            const frequency = parseInt(elements.targetCanvas.dataset.frequency);
+            const amplitude = parseInt(elements.targetCanvas.dataset.amplitude);
+            const distance = parseInt(elements.targetCanvas.dataset.distance);
+            const phase = elements.targetCanvas.dataset.phase;
+            drawWaveInterference(targetCtx, frequency, amplitude, distance, phase, true);
+        }
+
+        // 繪製預覽波形
+        function drawPreviewWave() {
+            if (!elements.previewCanvas.width) return;
+            const frequency = parseInt(elements.frequencySlider.value);
+            const amplitude = parseInt(elements.amplitudeSlider.value);
+            const distance = parseInt(elements.distanceSlider.value);
+            drawWaveInterference(previewCtx, frequency, amplitude, distance, gameState.phase, gameState.enhancedMode);
+        }
+
+        // 繪製波干涉圖
+        function drawWaveInterference(ctx, frequency, amplitude, distance, phase, enhanced) {
+            const canvas = ctx.canvas;
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const centerY = height / 2;
+            const distanceScaled = (distance / 10) * (width * 0.4);
+            const source1X = width / 2 - distanceScaled / 2;
+            const source2X = width / 2 + distanceScaled / 2;
+
+            let isTarget = (ctx === targetCtx);
+            if (!isTarget && gameState.showGrid) {
+                drawGrid(ctx, width, height, source1X, source2X, centerY);
+            }
+
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+            const frequencyScaled = frequency * 0.04;
+            const amplitudeScaled = amplitude * 0.1;
+            const phaseDiff = phase === 'same' ? 0 : Math.PI;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const d1 = Math.sqrt((x - source1X) ** 2 + (y - centerY) ** 2);
+                    const d2 = Math.sqrt((x - source2X) ** 2 + (y - centerY) ** 2);
+                    const decay1 = 1 / Math.sqrt(Math.max(1, d1 * 0.1));
+                    const decay2 = 1 / Math.sqrt(Math.max(1, d2 * 0.1));
+                    const wave1 = Math.cos(d1 * frequencyScaled) * amplitudeScaled * decay1;
+                    const wave2 = Math.cos(d2 * frequencyScaled + phaseDiff) * amplitudeScaled * decay2;
+                    let intensity = wave1 + wave2;
+
+                    if (enhanced) {
+                        intensity = Math.min(1, Math.abs(intensity) * 2);
+                    } else {
+                        intensity = (intensity + amplitudeScaled * 2) / (amplitudeScaled * 4);
+                    }
+
+                    const index = (y * width + x) * 4;
+                    let color;
+                    if (isTarget) {
+                        const gray = Math.floor(150 + intensity * 100);
+                        color = { r: gray, g: gray, b: gray, a: 255 };
+                    } else {
+                        color = getWaveColor(intensity);
+                    }
+                    data[index] = color.r;
+                    data[index + 1] = color.g;
+                    data[index + 2] = color.b;
+                    data[index + 3] = color.a;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+
+            // 波源
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(source1X, centerY, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(source2X, centerY, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 波源間距標籤
+            const label = `波源間距: ${distance}`;
+            ctx.font = '18px Noto Sans TC';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const textMetrics = ctx.measureText(label);
+            const textWidth = textMetrics.width;
+            const bgPaddingX = 18;
+            const boxWidth = textWidth + bgPaddingX * 2;
+            const boxHeight = 24;
+            const boxX = width / 2 - boxWidth / 2;
+            const boxY = height - boxHeight - 8;
+            ctx.save();
+            ctx.globalAlpha = 0.4;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = '#fff';
+            ctx.fillText(label, width / 2, boxY + boxHeight / 2);
+            ctx.restore();
+        }
+
+        // 繪製網格
+        function drawGrid(ctx, width, height, source1X, source2X, centerY) {
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
+            ctx.lineWidth = 1;
+            const gridSize = 20;
+            for (let x = 0; x < width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(source1X, centerY);
+            ctx.lineTo(source2X, centerY);
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(width / 2, 0);
+            ctx.lineTo(width / 2, height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // 獲取波的顏色
+        function getWaveColor(intensity) {
+            const r = Math.floor(56 + intensity * 199);
+            const g = Math.floor(189 + intensity * 66);
+            const b = Math.floor(248 + intensity * 7);
+            const a = Math.floor(100 + intensity * 155);
+            return { r, g, b, a };
+        }
+
+        // 檢查答案
+        function checkAnswer() {
+            if (!gameState.levelStarted) return;
+            if (gameState.animating) return; // 修復：動畫中鎖提交，防連點跳關
+
+            const targetTemplate = targetTemplates[gameState.activeTargets[gameState.currentTarget]];
+            const frequency = parseInt(elements.frequencySlider.value);
+            const distance = parseInt(elements.distanceSlider.value);
+            const phase = gameState.phase;
+
+            const frequencyMatch = frequency === targetTemplate.frequency;
+            const distanceMatch = distance === targetTemplate.distance;
+            const phaseMatch = phase === targetTemplate.phase;
+
+            if (frequencyMatch && distanceMatch && phaseMatch) {
+                showDoorAnimation(() => {
+                    gameState.currentTarget++;
+                    if (gameState.currentTarget < gameState.totalTargets) {
+                        elements.targetCounter.textContent = `${gameState.currentTarget + 1}/${gameState.totalTargets}`;
+                        elements.targetProgressBar.style.width = `${((gameState.currentTarget + 1) / gameState.totalTargets) * 100}%`;
+                        setTargetWave();
+                        resetControls();
+                    } else {
+                        if (gameState.currentLevel < 4) {
+                            startLevel(gameState.currentLevel + 1);
+                        } else {
+                            gameCompleted();
+                        }
+                    }
+                });
+            } else {
+                gameState.mistakes++;
+                elements.submitBtn.classList.add('bg-red-500');
+                elements.submitBtn.textContent = "再試一次";
+
+                let hint = "提示：";
+                if (!frequencyMatch) hint += "頻率不符合、";
+                if (!distanceMatch) hint += "波源間距不符合、";
+                if (!phaseMatch) hint += "相位不符合、";
+                hint = hint.slice(0, -1);
+                elements.submitBtn.title = hint;
+
+                setTimeout(() => {
+                    elements.submitBtn.classList.remove('bg-red-500');
+                    elements.submitBtn.textContent = "提交答案";
+                    elements.submitBtn.title = "";
+                }, 1000);
+            }
+        }
+
+        // 顯示門動畫
+        function showDoorAnimation(callback) {
+            gameState.animating = true;
+            elements.templeDoorContainer.classList.remove('hidden');
+            elements.templeDoorContainer.classList.add('flex');
+
+            const doors = elements.templeDoorContainer.querySelectorAll('.temple-door');
+            const effect = elements.templeDoorContainer.querySelector('.water-door-effect');
+
+            setTimeout(() => {
+                effect.classList.add('active');
+                setTimeout(() => {
+                    doors[0].classList.add('open-left');
+                    doors[1].classList.add('open-right');
+                    setTimeout(() => {
+                        elements.templeDoorContainer.classList.remove('flex');
+                        elements.templeDoorContainer.classList.add('hidden');
+                        effect.classList.remove('active');
+                        doors[0].classList.remove('open-left');
+                        doors[1].classList.remove('open-right');
+                        gameState.animating = false;
+                        if (callback) callback();
+                    }, 1500);
+                }, 800);
+            }, 200);
+        }
+
+        // 風干擾
+        function startWindDisturbance() {
+            gameState.windDisturbance = true;
+            if (gameState.windTimer) clearTimeout(gameState.windTimer);
+            scheduleNextWind();
+        }
+        function scheduleNextWind() {
+            if (!gameState.windDisturbance) return;
+            const nextWindTime = 10000 + Math.random() * 10000;
+            gameState.windTimer = setTimeout(() => {
+                triggerWind();
+                scheduleNextWind();
+            }, nextWindTime);
+        }
+        function triggerWind() {
+            if (!gameState.windDisturbance) return;
+            elements.targetWindEffect.style.opacity = '1';
+            elements.previewWindEffect.style.opacity = '1';
+            const windDuration = 2000 + Math.random() * 3000;
+            setTimeout(() => {
+                elements.targetWindEffect.style.opacity = '0';
+                elements.previewWindEffect.style.opacity = '0';
+            }, windDuration);
+        }
+        function stopWindDisturbance() {
+            gameState.windDisturbance = false;
+            if (gameState.windTimer) {
+                clearTimeout(gameState.windTimer);
+                gameState.windTimer = null;
+            }
+            elements.targetWindEffect.style.opacity = '0';
+            elements.previewWindEffect.style.opacity = '0';
+        }
+
+        // 遊戲結束（超時）
+        function gameOver() {
+            stopWindDisturbance();
+            if (gameState.timer) {
+                clearInterval(gameState.timer);
+                gameState.timer = null;
+            }
+            gameState.levelStarted = false;
+            showEndScreen("試煉失敗", "漂流挑戰者", "水波雖未聽從召喚，但你的勇氣值得讚賞！", "超時未完成");
+        }
+
+        // 遊戲完成
+        function gameCompleted() {
+            gameState.endTime = Date.now();
+            const timeTaken = Math.floor((gameState.endTime - gameState.startTime) / 1000);
+
+            stopWindDisturbance();
+            if (gameState.timer) {
+                clearInterval(gameState.timer);
+                gameState.timer = null;
+            }
+            gameState.levelStarted = false;
+
+            let title = null;
+            let titleRank = titles.length - 1;
+            for (let i = 0; i < titles.length; i++) {
+                if (titles[i].condition(timeTaken, gameState.mistakes)) {
+                    title = titles[i];
+                    titleRank = i;
+                    break;
+                }
+            }
+
+            // 系列進度：完成 + 最佳稱號（rank 越小越好）
+            const prev = loadStore().waves || {};
+            const patch = {
+                completed: true,
+                lastPerformance: `${timeTaken}秒內完成，失誤${gameState.mistakes}次`
+            };
+            if (!(Number.isFinite(prev.bestTitleRank)) || titleRank < prev.bestTitleRank) {
+                patch.bestTitleRank = titleRank;
+                patch.bestTitle = title.shortTitle;
+            }
+            saveSeriesProgress(patch);
+
+            showEndScreen(
+                "試煉完成！",
+                title.shortTitle,
+                title.description,
+                `${timeTaken}秒內完成，失誤${gameState.mistakes}次`
+            );
+        }
+
+        // 顯示結束畫面
+        function showEndScreen(title, shortTitle, description, performance) {
+            elements.endTitle.textContent = title;
+            elements.endTitleShort.textContent = shortTitle;
+            elements.endDescription.textContent = description;
+            elements.endPerformance.textContent = performance;
+            elements.endScreen.classList.remove('hidden');
+            elements.endScreen.classList.add('flex');
+        }
+
+        // 初始化
+        function init() {
+            gameState.enhancedMode = true;
+            if (elements.enhancedMode) {
+                elements.enhancedMode.checked = true;
+                if (elements.enhancedMode.parentElement) elements.enhancedMode.parentElement.style.display = 'none';
+            }
+            resizeCanvas();
+            initEventListeners();
+        }
+
+        init();
+
+        // 測試掛鉤（不影響遊戲）
+        window.__debug = { gameState, levelSettings, targetTemplates, titles };
+    </script>
+</body>
+</html>

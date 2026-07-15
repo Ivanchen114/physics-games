@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>時空軌跡修復者 Chronotrain Convergence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+        .game-container {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #38bdf8;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+        }
+        .btn { transition: all 0.3s ease; }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(56, 189, 248, 0.4);
+        }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .track {
+            height: 8px;
+            background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+            position: relative;
+        }
+        .train {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            transition: left 0.1s linear;
+            z-index: 2;
+        }
+        .target-zone {
+            position: absolute;
+            top: 50%;
+            height: 30px;
+            width: 22px;
+            border: 2px dashed #22c55e;
+            transform: translate(-50%, -50%);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.4; }
+            50% { opacity: 0.9; }
+            100% { opacity: 0.4; }
+        }
+        .particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        .meet-flash {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #22c55e;
+            box-shadow: 0 0 20px #22c55e;
+            animation: pulse 1s infinite;
+            z-index: 3;
+        }
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            border-radius: 4px;
+            background: #334155;
+            outline: none;
+        }
+        .slider:disabled { opacity: 0.5; }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        .slider-a::-webkit-slider-thumb { background: #f97316; }
+        .slider-a::-moz-range-thumb { background: #f97316; }
+        .slider-b::-webkit-slider-thumb { background: #8b5cf6; }
+        .slider-b::-moz-range-thumb { background: #8b5cf6; }
+        .star { color: #94a3b8; transition: color 0.3s ease; }
+        .star.active { color: #fbbf24; }
+        .modal {
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <a href="../index.html" class="fixed top-3 left-3 z-40 bg-slate-800/80 border border-cyan-700 text-cyan-300 text-sm px-3 py-1.5 rounded-full hover:bg-slate-700">◂ 系列大廳</a>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="flex flex-col items-center justify-center min-h-screen p-4">
+        <h1 class="orbitron text-4xl md:text-6xl font-bold text-center mb-2 text-cyan-400">時空軌跡修復者</h1>
+        <p class="orbitron text-sm md:text-lg tracking-widest text-cyan-600 mb-8">CHRONOTRAIN CONVERGENCE</p>
+        <div class="game-container max-w-3xl w-full p-6 rounded-xl">
+            <p class="mb-6 text-lg">在未來的「時空物理實驗室」，一場意外實驗導致時空連續體出現了異常波動。這些異常表現為時空軌跡的扭曲，如果不及時修復，將導致整個時空結構崩潰。</p>
+            <p class="mb-8 text-lg">作為「時空軌跡修復者」，你必須利用精確的運動學知識來修復這些異常，恢復時空的穩定。</p>
+            <div class="flex justify-center">
+                <button id="start-btn" class="btn orbitron bg-gradient-to-r from-cyan-500 to-blue-500 text-white px-8 py-3 rounded-lg text-xl font-bold">開始任務</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Level Select Screen -->
+    <div id="level-select" class="hidden flex-col items-center justify-center min-h-screen p-4">
+        <h1 class="orbitron text-4xl font-bold text-center mb-8 text-cyan-400">選擇任務</h1>
+        <div class="game-container max-w-3xl w-full p-6 rounded-xl">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div id="level1-btn" class="bg-slate-800 p-4 rounded-lg hover:bg-slate-700 cursor-pointer transition-all">
+                    <h2 class="orbitron text-xl font-bold mb-2 text-orange-400">關卡一：等速軌跡修復</h2>
+                    <p class="mb-4">修復高速磁浮列車系統的時空異常。調整兩列列車的速度，使它們在目標點相遇。</p>
+                    <div class="flex">
+                        <div class="star text-2xl" id="level1-star1">★</div>
+                        <div class="star text-2xl" id="level1-star2">★</div>
+                        <div class="star text-2xl" id="level1-star3">★</div>
+                    </div>
+                </div>
+                <div id="level2-btn" class="bg-slate-800 p-4 rounded-lg hover:bg-slate-700 cursor-pointer transition-all">
+                    <h2 class="orbitron text-xl font-bold mb-2 text-purple-400">關卡二：加速度軌跡修復</h2>
+                    <p class="mb-4">修復時間流變區的時空異常。調整兩列列車的初始速度，使它們在目標點相遇。</p>
+                    <div class="flex">
+                        <div class="star text-2xl" id="level2-star1">★</div>
+                        <div class="star text-2xl" id="level2-star2">★</div>
+                        <div class="star text-2xl" id="level2-star3">★</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="hidden min-h-screen p-4">
+        <div class="max-w-5xl mx-auto">
+            <!-- Header -->
+            <div class="flex flex-wrap justify-between items-center gap-3 mb-6">
+                <h1 id="level-title" class="orbitron text-2xl md:text-3xl font-bold text-cyan-400">關卡一：等速軌跡修復</h1>
+                <div class="flex items-center">
+                    <div class="mr-4">
+                        <span class="text-sm">剩餘模擬次數：</span>
+                        <span id="attempts" class="font-bold">5</span><span>/5</span>
+                    </div>
+                    <button id="back-btn" class="btn bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg">返回選擇</button>
+                </div>
+            </div>
+
+            <!-- Game Container -->
+            <div class="game-container rounded-xl p-6 mb-6">
+                <!-- Mission Description -->
+                <div id="mission-description" class="mb-6">
+                    <h2 class="text-xl font-bold mb-2">任務說明</h2>
+                    <p id="level-description" class="mb-4"></p>
+                    <div class="bg-slate-800 p-4 rounded-lg">
+                        <h3 class="font-bold mb-2">目標：</h3>
+                        <p id="level-goal"></p>
+                    </div>
+                </div>
+
+                <!-- Simulation Area -->
+                <div class="mb-8">
+                    <div class="flex justify-between mb-2">
+                        <span id="track-start">0 km</span>
+                        <span id="target-position" class="text-green-400 font-bold">目標：400 km</span>
+                        <span id="track-end">1000 km</span>
+                    </div>
+                    <div id="track" class="track rounded-full relative mb-10">
+                        <div id="target-zone" class="target-zone"></div>
+                        <div id="train-a" class="train">
+                            <div class="flex flex-col items-center">
+                                <div class="w-6 h-6 bg-orange-500 rounded-full mb-1"></div>
+                                <span class="text-xs font-bold text-orange-500">A</span>
+                            </div>
+                        </div>
+                        <div id="train-b" class="train">
+                            <div class="flex flex-col items-center">
+                                <div class="w-6 h-6 bg-purple-500 rounded-full mb-1"></div>
+                                <span class="text-xs font-bold text-purple-500">B</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Controls -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Train A -->
+                        <div class="bg-slate-800 p-4 rounded-lg border-l-4 border-orange-500">
+                            <h3 class="font-bold text-orange-400 mb-2">列車 A</h3>
+                            <div class="mb-4">
+                                <div class="flex justify-between mb-1">
+                                    <span>初始位置：</span>
+                                    <span id="train-a-position">0 km</span>
+                                </div>
+                                <div id="acceleration-a-container" class="flex justify-between mb-1 hidden">
+                                    <span>加速度：</span>
+                                    <span id="train-a-acceleration">8 km/h²</span>
+                                </div>
+                                <div class="flex justify-between mb-1">
+                                    <span id="velocity-a-label">速度：</span>
+                                    <span id="train-a-velocity">50 km/h</span>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <input type="range" id="train-a-velocity-slider" class="slider slider-a w-full" min="20" max="200" value="50">
+                                <div class="flex justify-between text-xs">
+                                    <span id="min-velocity-a">20 km/h</span>
+                                    <span id="max-velocity-a">200 km/h</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Train B -->
+                        <div class="bg-slate-800 p-4 rounded-lg border-l-4 border-purple-500">
+                            <h3 class="font-bold text-purple-400 mb-2">列車 B</h3>
+                            <div class="mb-4">
+                                <div class="flex justify-between mb-1">
+                                    <span>初始位置：</span>
+                                    <span id="train-b-position">1000 km</span>
+                                </div>
+                                <div id="acceleration-b-container" class="flex justify-between mb-1 hidden">
+                                    <span>加速度：</span>
+                                    <span id="train-b-acceleration">-8 km/h²</span>
+                                </div>
+                                <div class="flex justify-between mb-1">
+                                    <span id="velocity-b-label">速度：</span>
+                                    <span id="train-b-velocity">70 km/h</span>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <input type="range" id="train-b-velocity-slider" class="slider slider-b w-full" min="20" max="200" value="70">
+                                <div class="flex justify-between text-xs">
+                                    <span id="min-velocity-b">20 km/h</span>
+                                    <span id="max-velocity-b">200 km/h</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex flex-wrap justify-between items-center gap-3">
+                    <div class="flex flex-wrap gap-3">
+                        <button id="simulate-btn" class="btn bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg">開始模擬</button>
+                        <button id="reset-btn" class="btn bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg">重設參數</button>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        <button id="basic-hint-btn" class="btn bg-amber-600 hover:bg-amber-500 px-4 py-2 rounded-lg">基礎提示</button>
+                        <button id="advanced-hint-btn" class="btn bg-amber-700 hover:bg-amber-600 px-4 py-2 rounded-lg">深入提示</button>
+                        <button id="submit-btn" class="btn bg-green-600 hover:bg-green-500 px-6 py-2 rounded-lg font-bold">提交解答</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hint Modal -->
+    <div id="hint-modal" class="modal hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 max-w-md w-full p-6 rounded-xl border border-amber-400">
+            <h2 id="hint-title" class="orbitron text-xl font-bold mb-4 text-amber-400">基礎提示</h2>
+            <p id="hint-text" class="mb-4 leading-relaxed"></p>
+            <p class="text-xs text-slate-400 mb-6">※ 使用提示將影響本關的星級評分</p>
+            <div class="flex justify-end">
+                <button id="hint-close-btn" class="btn bg-amber-600 hover:bg-amber-500 px-6 py-2 rounded-lg font-bold">知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Result Modal -->
+    <div id="result-modal" class="modal hidden fixed inset-0 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 max-w-md w-full p-6 rounded-xl border border-cyan-400">
+            <h2 id="result-title" class="orbitron text-2xl font-bold mb-4 text-center">修復成功！</h2>
+            <p id="result-message" class="mb-6 text-center">你成功修復了時空軌跡！</p>
+
+            <div class="flex justify-center mb-6">
+                <div id="result-stars" class="flex space-x-2">
+                    <div class="star text-3xl">★</div>
+                    <div class="star text-3xl">★</div>
+                    <div class="star text-3xl">★</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-slate-700 p-3 rounded-lg">
+                    <span class="text-sm">相遇位置：</span>
+                    <span id="result-position" class="font-bold">-</span>
+                </div>
+                <div class="bg-slate-700 p-3 rounded-lg">
+                    <span class="text-sm">誤差：</span>
+                    <span id="result-error" class="font-bold">-</span>
+                </div>
+                <div class="bg-slate-700 p-3 rounded-lg">
+                    <span class="text-sm">模擬次數：</span>
+                    <span id="result-attempts" class="font-bold">0/5</span>
+                </div>
+                <div class="bg-slate-700 p-3 rounded-lg">
+                    <span class="text-sm">使用提示：</span>
+                    <span id="result-hints" class="font-bold">無</span>
+                </div>
+            </div>
+
+            <div class="flex justify-between">
+                <button id="retry-btn" class="btn bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded-lg">重新嘗試</button>
+                <button id="next-btn" class="btn bg-cyan-600 hover:bg-cyan-500 px-6 py-2 rounded-lg font-bold">下一關</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    'use strict';
+
+    // ===== 關卡設定 =====
+    const TRACK_LENGTH = 1000;
+    const MAX_ATTEMPTS = 5;
+
+    const LEVELS = {
+        1: {
+            title: '關卡一：等速軌跡修復',
+            description: '第一個時空異常出現在高速磁浮列車系統。兩列磁浮列車從不同站點出發，系統計算出它們必須在特定的時空點相遇才能修復異常，但控制系統受到干擾。',
+            goal: '調整兩列列車的速度，使它們在目標點（400km）相遇。',
+            target: 400,
+            margin: 5,
+            accel: null,
+            sliderA: { min: 20, max: 200, def: 50, label: '速度：' },
+            sliderB: { min: 20, max: 200, def: 70, label: '速度：' },
+            hintBasic: '等速運動公式是 x = x₀ + vt，相遇時兩列車的位置相同。',
+            hintAdvanced: '設相遇時間為 t，列車A走過的距離為 vA×t，列車B走過的距離為 vB×t，且兩者總和為初始距離 1000km。'
+        },
+        2: {
+            title: '關卡二：加速度軌跡修復',
+            description: '第二個時空異常出現在高速磁浮列車系統的時間流變區。列車不再以等速運動，而是受到時空扭曲場的影響產生固定的加速度。',
+            goal: '調整兩列列車的初始速度，使它們在目標點（400km）相遇。加速度已被時空異常鎖定，無法更改。',
+            target: 400,
+            margin: 5,
+            accel: { a: 8, b: -8 },
+            sliderA: { min: 0, max: 100, def: 50, label: '初始速度：' },
+            sliderB: { min: -150, max: 0, def: -70, label: '初始速度：' },
+            hintBasic: '在有加速度的運動中，位置公式為：x = x₀ + v₀t + (1/2)at²',
+            hintAdvanced: '相遇時兩列車位置相同。將兩列車的位置公式設為相等，解出相遇時間後，找出使相遇位置為 400km 的初始速度組合。'
+        }
+    };
+
+    // ===== 遊戲狀態 =====
+    const state = {
+        level: 0,
+        attemptsLeft: MAX_ATTEMPTS,
+        usedBasic: false,
+        usedAdvanced: false,
+        simulating: false,
+        timer: null,
+        simTime: 0,
+        particles: [],
+        vA: 50,
+        vB: 70,
+        stars: { 1: 0, 2: 0 },
+        completed: { 1: false, 2: false }
+    };
+
+    // ===== 系列進度（localStorage，與大廳共用）=====
+    const STORE_KEY = 'sssh-physics-series-v1';
+    function loadStore() {
+        try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; }
+    }
+    function saveSeriesProgress() {
+        try {
+            const s = loadStore();
+            s.chronotrain = { stars: state.stars, completed: state.completed };
+            localStorage.setItem(STORE_KEY, JSON.stringify(s));
+        } catch (e) { /* 私密模式等情況下靜默略過 */ }
+    }
+    (function hydrateFromStore() {
+        const saved = loadStore().chronotrain;
+        if (saved && saved.stars) {
+            state.stars[1] = saved.stars[1] || 0;
+            state.stars[2] = saved.stars[2] || 0;
+            state.completed[1] = !!(saved.completed && saved.completed[1]);
+            state.completed[2] = !!(saved.completed && saved.completed[2]);
+        }
+    })();
+
+    // ===== DOM =====
+    const $ = (id) => document.getElementById(id);
+    const screens = { start: $('start-screen'), levelSelect: $('level-select'), game: $('game-screen') };
+    const el = {
+        levelTitle: $('level-title'), levelDescription: $('level-description'), levelGoal: $('level-goal'),
+        attempts: $('attempts'), targetPosition: $('target-position'),
+        track: $('track'), targetZone: $('target-zone'), trainA: $('train-a'), trainB: $('train-b'),
+        accelABox: $('acceleration-a-container'), accelBBox: $('acceleration-b-container'),
+        accelA: $('train-a-acceleration'), accelB: $('train-b-acceleration'),
+        vALabel: $('velocity-a-label'), vBLabel: $('velocity-b-label'),
+        vAText: $('train-a-velocity'), vBText: $('train-b-velocity'),
+        sliderA: $('train-a-velocity-slider'), sliderB: $('train-b-velocity-slider'),
+        minVA: $('min-velocity-a'), maxVA: $('max-velocity-a'),
+        minVB: $('min-velocity-b'), maxVB: $('max-velocity-b'),
+        hintModal: $('hint-modal'), hintTitle: $('hint-title'), hintText: $('hint-text'),
+        resultModal: $('result-modal'), resultTitle: $('result-title'), resultMessage: $('result-message'),
+        resultStars: $('result-stars'), resultPosition: $('result-position'), resultError: $('result-error'),
+        resultAttempts: $('result-attempts'), resultHints: $('result-hints'),
+        levelStars: {
+            1: [$('level1-star1'), $('level1-star2'), $('level1-star3')],
+            2: [$('level2-star1'), $('level2-star2'), $('level2-star3')]
+        }
+    };
+    const btn = {
+        start: $('start-btn'), back: $('back-btn'), level1: $('level1-btn'), level2: $('level2-btn'),
+        simulate: $('simulate-btn'), reset: $('reset-btn'),
+        basicHint: $('basic-hint-btn'), advancedHint: $('advanced-hint-btn'),
+        submit: $('submit-btn'), retry: $('retry-btn'), next: $('next-btn'),
+        hintClose: $('hint-close-btn')
+    };
+
+    // ===== 物理計算（解析解，兩關共用）=====
+    // 回傳 { t, x }；無法相遇回傳 null
+    function computeMeeting(level, vA, vB) {
+        if (level === 1) {
+            // A: x = vA·t（向右）；B: x = 1000 − vB·t（向左，vB 為正的速率）
+            const closing = vA + vB;
+            if (closing <= 0) return null;
+            const t = TRACK_LENGTH / closing;
+            return { t: t, x: vA * t };
+        } else {
+            // A: x = v0A·t + ½aA·t²；B: x = 1000 + v0B·t + ½aB·t²（v0B ≤ 0, aB < 0）
+            const aA = LEVELS[2].accel.a, aB = LEVELS[2].accel.b;
+            const a = 0.5 * (aA - aB);      // = 8
+            const b = vA - vB;              // v0A − v0B ≥ 0
+            const c = -TRACK_LENGTH;
+            const disc = b * b - 4 * a * c; // 恆正
+            if (disc < 0) return null;
+            const sq = Math.sqrt(disc);
+            const t1 = (-b + sq) / (2 * a);
+            const t2 = (-b - sq) / (2 * a);
+            let t = null;
+            if (t1 > 0 && t2 > 0) t = Math.min(t1, t2);
+            else if (t1 > 0) t = t1;
+            else if (t2 > 0) t = t2;
+            if (t === null) return null;
+            return { t: t, x: vA * t + 0.5 * aA * t * t };
+        }
+    }
+
+    // t 時刻兩車位置
+    function positionsAt(level, vA, vB, t) {
+        if (level === 1) {
+            return { a: vA * t, b: TRACK_LENGTH - vB * t };
+        }
+        const aA = LEVELS[2].accel.a, aB = LEVELS[2].accel.b;
+        return {
+            a: vA * t + 0.5 * aA * t * t,
+            b: TRACK_LENGTH + vB * t + 0.5 * aB * t * t
+        };
+    }
+
+    // ===== 畫面切換 =====
+    function showScreen(name) {
+        Object.values(screens).forEach(s => { s.classList.add('hidden'); s.classList.remove('flex'); });
+        screens[name].classList.remove('hidden');
+        if (name !== 'game') screens[name].classList.add('flex');
+        if (name === 'levelSelect') updateStarsDisplay();
+    }
+
+    function updateStarsDisplay() {
+        [1, 2].forEach(lv => {
+            el.levelStars[lv].forEach((star, i) => {
+                star.classList.toggle('active', i < state.stars[lv]);
+            });
+        });
+    }
+
+    // ===== 關卡載入 =====
+    function startLevel(level) {
+        stopSimulation();
+        const cfg = LEVELS[level];
+        state.level = level;
+        state.attemptsLeft = MAX_ATTEMPTS;
+        state.usedBasic = false;
+        state.usedAdvanced = false;
+        state.vA = cfg.sliderA.def;
+        state.vB = cfg.sliderB.def;
+
+        el.levelTitle.textContent = cfg.title;
+        el.levelDescription.textContent = cfg.description;
+        el.levelGoal.textContent = cfg.goal;
+        el.targetPosition.textContent = '目標：' + cfg.target + ' km';
+        el.attempts.textContent = state.attemptsLeft;
+
+        // 滑桿（先設範圍再設值，避免被舊範圍截斷）
+        el.sliderA.min = cfg.sliderA.min; el.sliderA.max = cfg.sliderA.max; el.sliderA.value = cfg.sliderA.def;
+        el.sliderB.min = cfg.sliderB.min; el.sliderB.max = cfg.sliderB.max; el.sliderB.value = cfg.sliderB.def;
+        el.minVA.textContent = cfg.sliderA.min + ' km/h'; el.maxVA.textContent = cfg.sliderA.max + ' km/h';
+        el.minVB.textContent = cfg.sliderB.min + ' km/h'; el.maxVB.textContent = cfg.sliderB.max + ' km/h';
+        el.vALabel.textContent = cfg.sliderA.label; el.vBLabel.textContent = cfg.sliderB.label;
+        el.vAText.textContent = state.vA + ' km/h'; el.vBText.textContent = state.vB + ' km/h';
+
+        // 加速度顯示
+        const hasAccel = !!cfg.accel;
+        el.accelABox.classList.toggle('hidden', !hasAccel);
+        el.accelBBox.classList.toggle('hidden', !hasAccel);
+        if (hasAccel) {
+            el.accelA.textContent = cfg.accel.a + ' km/h²';
+            el.accelB.textContent = cfg.accel.b + ' km/h²';
+        }
+
+        setControlsEnabled(true);
+        updateSimButton();
+        resetTrackVisuals();
+        showScreen('game');
+    }
+
+    function resetTrackVisuals() {
+        const cfg = LEVELS[state.level];
+        el.targetZone.style.left = (cfg.target / TRACK_LENGTH * 100) + '%';
+        el.trainA.style.left = '0%';
+        el.trainB.style.left = '100%';
+        clearParticles();
+        removeFlash();
+    }
+
+    function setControlsEnabled(enabled) {
+        el.sliderA.disabled = !enabled;
+        el.sliderB.disabled = !enabled;
+        btn.reset.disabled = !enabled;
+        btn.submit.disabled = !enabled;
+    }
+
+    function updateSimButton() {
+        if (state.simulating) {
+            btn.simulate.textContent = '停止模擬';
+            btn.simulate.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+            btn.simulate.classList.add('bg-red-600', 'hover:bg-red-500');
+        } else {
+            btn.simulate.textContent = state.attemptsLeft > 0 ? '開始模擬' : '提交解答';
+            btn.simulate.classList.remove('bg-red-600', 'hover:bg-red-500');
+            btn.simulate.classList.add('bg-blue-600', 'hover:bg-blue-500');
+        }
+    }
+
+    // ===== 模擬 =====
+    function toggleSimulation() {
+        if (state.simulating) {
+            stopSimulation();
+            resetTrackVisuals();
+            return;
+        }
+        if (state.attemptsLeft <= 0) {
+            submitSolution();
+            return;
+        }
+        state.attemptsLeft--;
+        el.attempts.textContent = state.attemptsLeft;
+        runSimulation();
+    }
+
+    function runSimulation() {
+        state.simulating = true;
+        state.simTime = 0;
+        setControlsEnabled(false);
+        updateSimButton();
+        resetTrackVisuals();
+
+        const level = state.level;
+        const vA = state.vA, vB = state.vB;
+        const meeting = computeMeeting(level, vA, vB);
+
+        state.timer = setInterval(() => {
+            state.simTime += 0.1; // 每 100ms 模擬 0.1 小時
+            const pos = positionsAt(level, vA, vB, state.simTime);
+
+            const pctA = Math.min(Math.max(pos.a / TRACK_LENGTH * 100, 0), 100);
+            const pctB = Math.min(Math.max(pos.b / TRACK_LENGTH * 100, 0), 100);
+            el.trainA.style.left = pctA + '%';
+            el.trainB.style.left = pctB + '%';
+            spawnParticle('#f97316', pctA);
+            spawnParticle('#8b5cf6', pctB);
+            fadeParticles();
+
+            // 相遇偵測：A 由左向右、B 由右向左，跨越即相遇（兩關通用，不會跳過）
+            if (pos.a >= pos.b) {
+                finishSimulation(meeting);
+                return;
+            }
+            // 保險：出界即停（理論上不會發生）
+            if (pos.a > TRACK_LENGTH + 100 || pos.b < -100 || state.simTime > 60) {
+                finishSimulation(null);
+            }
+        }, 100);
+    }
+
+    function finishSimulation(meeting) {
+        stopSimulation();
+        if (meeting) {
+            const pct = Math.min(Math.max(meeting.x / TRACK_LENGTH * 100, 0), 100);
+            el.trainA.style.left = pct + '%';
+            el.trainB.style.left = pct + '%';
+            const flash = document.createElement('div');
+            flash.className = 'meet-flash';
+            flash.style.left = pct + '%';
+            el.track.appendChild(flash);
+            setTimeout(() => flash.remove(), 3000);
+        }
+        // 用完最後一次模擬 → 自動提交
+        if (state.attemptsLeft <= 0) {
+            setTimeout(() => {
+                if (el.resultModal.classList.contains('hidden')) submitSolution();
+            }, 1200);
+        }
+    }
+
+    function stopSimulation() {
+        if (state.timer) { clearInterval(state.timer); state.timer = null; }
+        state.simulating = false;
+        setControlsEnabled(true);
+        updateSimButton();
+    }
+
+    function spawnParticle(color, pct) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        p.style.backgroundColor = color;
+        p.style.left = pct + '%';
+        p.style.top = '50%';
+        el.track.appendChild(p);
+        state.particles.push({ node: p, born: Date.now() });
+    }
+
+    function fadeParticles() {
+        state.particles = state.particles.filter(p => {
+            const age = Date.now() - p.born;
+            if (age > 2000) { p.node.remove(); return false; }
+            p.node.style.opacity = 1 - age / 2000;
+            return true;
+        });
+    }
+
+    function clearParticles() {
+        state.particles.forEach(p => p.node.remove());
+        state.particles = [];
+    }
+
+    function removeFlash() {
+        el.track.querySelectorAll('.meet-flash').forEach(f => f.remove());
+    }
+
+    // ===== 提示 =====
+    function openHint(type) {
+        const cfg = LEVELS[state.level];
+        if (type === 'basic') {
+            state.usedBasic = true;
+            el.hintTitle.textContent = '基礎提示';
+            el.hintText.textContent = cfg.hintBasic;
+        } else {
+            state.usedAdvanced = true;
+            el.hintTitle.textContent = '深入提示';
+            el.hintText.textContent = cfg.hintAdvanced;
+        }
+        el.hintModal.classList.remove('hidden');
+    }
+
+    // ===== 提交與評分 =====
+    function submitSolution() {
+        if (state.simulating) { stopSimulation(); resetTrackVisuals(); }
+
+        const cfg = LEVELS[state.level];
+        const meeting = computeMeeting(state.level, state.vA, state.vB);
+
+        if (!meeting) {
+            showResult({ success: false, message: '列車無法相遇', stars: 0, x: null, error: null });
+            return;
+        }
+
+        const error = Math.abs(meeting.x - cfg.target);
+        const used = MAX_ATTEMPTS - state.attemptsLeft;
+        const usedHint = state.usedBasic || state.usedAdvanced;
+
+        // 星級：⭐ 誤差≤30；⭐⭐ 誤差≤15 且模擬≤3；⭐⭐⭐ 誤差≤5 且模擬≤2 且未用提示
+        let stars = 0;
+        if (error <= 30) stars = 1;
+        if (error <= 15 && used <= 3) stars = 2;
+        if (error <= cfg.margin && used <= 2 && !usedHint) stars = 3;
+        const success = stars > 0;
+
+        if (success) {
+            state.completed[state.level] = true;
+            if (stars > state.stars[state.level]) state.stars[state.level] = stars;
+            saveSeriesProgress();
+        }
+
+        showResult({
+            success: success,
+            message: success ? '你成功修復了時空軌跡！' : '時空異常仍未修復，再檢查一次你的運動學計算。',
+            stars: stars, x: meeting.x, error: error
+        });
+    }
+
+    function showResult(r) {
+        el.resultTitle.textContent = r.success ? '修復成功！' : '修復失敗';
+        el.resultTitle.className = 'orbitron text-2xl font-bold mb-4 text-center ' + (r.success ? 'text-green-400' : 'text-red-400');
+        el.resultMessage.textContent = r.message;
+
+        el.resultStars.querySelectorAll('.star').forEach((s, i) => {
+            s.classList.toggle('active', i < r.stars);
+        });
+
+        el.resultPosition.textContent = Number.isFinite(r.x) ? r.x.toFixed(2) + ' km' : '無法計算';
+        el.resultError.textContent = Number.isFinite(r.error) ? r.error.toFixed(2) + ' km' : '無法計算';
+        el.resultAttempts.textContent = (MAX_ATTEMPTS - state.attemptsLeft) + '/' + MAX_ATTEMPTS;
+
+        let hints = '無';
+        if (state.usedBasic && state.usedAdvanced) hints = '基礎＋深入';
+        else if (state.usedBasic) hints = '基礎';
+        else if (state.usedAdvanced) hints = '深入';
+        el.resultHints.textContent = hints;
+
+        btn.retry.textContent = state.attemptsLeft <= 0 ? '重啟修復程序' : '重新嘗試';
+
+        if (r.success) {
+            btn.next.classList.remove('hidden');
+            btn.next.textContent = state.level === 1 ? '下一關' : '返回選擇';
+        } else {
+            btn.next.classList.add('hidden');
+        }
+
+        el.resultModal.classList.remove('hidden');
+    }
+
+    function retryLevel() {
+        el.resultModal.classList.add('hidden');
+        if (state.attemptsLeft <= 0) {
+            state.attemptsLeft = MAX_ATTEMPTS;
+            state.usedBasic = false;
+            state.usedAdvanced = false;
+            el.attempts.textContent = state.attemptsLeft;
+        }
+        resetParameters();
+        updateSimButton();
+    }
+
+    function goToNextLevel() {
+        el.resultModal.classList.add('hidden');
+        if (state.level === 1) startLevel(2);
+        else showScreen('levelSelect');
+    }
+
+    function resetParameters() {
+        const cfg = LEVELS[state.level];
+        state.vA = cfg.sliderA.def;
+        state.vB = cfg.sliderB.def;
+        el.sliderA.value = state.vA;
+        el.sliderB.value = state.vB;
+        el.vAText.textContent = state.vA + ' km/h';
+        el.vBText.textContent = state.vB + ' km/h';
+        stopSimulation();
+        resetTrackVisuals();
+    }
+
+    // ===== 事件 =====
+    btn.start.addEventListener('click', () => showScreen('levelSelect'));
+    btn.back.addEventListener('click', () => { stopSimulation(); showScreen('levelSelect'); });
+    btn.level1.addEventListener('click', () => startLevel(1));
+    btn.level2.addEventListener('click', () => startLevel(2));
+    btn.simulate.addEventListener('click', toggleSimulation);
+    btn.reset.addEventListener('click', resetParameters);
+    btn.basicHint.addEventListener('click', () => openHint('basic'));
+    btn.advancedHint.addEventListener('click', () => openHint('advanced'));
+    btn.hintClose.addEventListener('click', () => el.hintModal.classList.add('hidden'));
+    btn.submit.addEventListener('click', submitSolution);
+    btn.retry.addEventListener('click', retryLevel);
+    btn.next.addEventListener('click', goToNextLevel);
+
+    el.sliderA.addEventListener('input', () => {
+        state.vA = parseInt(el.sliderA.value, 10);
+        el.vAText.textContent = state.vA + ' km/h';
+    });
+    el.sliderB.addEventListener('input', () => {
+        state.vB = parseInt(el.sliderB.value, 10);
+        el.vBText.textContent = state.vB + ' km/h';
+    });
+    </script>
+</body>
+</html>

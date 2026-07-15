@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>巨人神殿：生物力學之謎</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&display=swap');
+
+    body {
+      font-family: 'Noto Serif TC', serif;
+      background: linear-gradient(to bottom, #000000, #1a1308);
+      color: #e2c285;
+      overflow-x: hidden;
+    }
+    .temple-bg {
+      background-image: radial-gradient(circle at center, rgba(61, 38, 15, 0.8), rgba(20, 12, 5, 0.95)),
+                        url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M50 50 L60 40 L50 30 L40 40 Z' fill='none' stroke='%23c9a55c' stroke-width='0.5'/%3E%3C/svg%3E");
+    }
+    .gold-text {
+      color: #e2c285;
+      text-shadow: 0 0 5px rgba(226, 194, 133, 0.5);
+    }
+    .gold-border {
+      border-color: #c9a55c;
+      box-shadow: 0 0 10px rgba(201, 165, 92, 0.3);
+    }
+    .ancient-button {
+      background: linear-gradient(to bottom, #c9a55c, #8c6d39);
+      border: 2px solid #e2c285;
+      color: #1a1308;
+      text-shadow: 0 0 2px rgba(255, 255, 255, 0.5);
+      transition: all 0.3s;
+    }
+    .ancient-button:hover {
+      background: linear-gradient(to bottom, #e2c285, #c9a55c);
+      box-shadow: 0 0 15px rgba(226, 194, 133, 0.7);
+      transform: translateY(-2px);
+    }
+    .ancient-button:disabled {
+      background: #5a4a2d;
+      border-color: #8c6d39;
+      color: #8c6d39;
+      cursor: not-allowed;
+    }
+    .level-card {
+      background: linear-gradient(135deg, rgba(61, 38, 15, 0.9), rgba(20, 12, 5, 0.95));
+      border: 1px solid #c9a55c;
+      transition: all 0.3s;
+    }
+    .level-card:hover {
+      box-shadow: 0 0 20px rgba(226, 194, 133, 0.5);
+      transform: translateY(-5px);
+    }
+    .level-card.completed {
+      background: linear-gradient(135deg, rgba(61, 48, 15, 0.9), rgba(30, 22, 5, 0.95));
+      border: 1px solid #e2c285;
+    }
+    .level-card.active {
+      box-shadow: 0 0 30px rgba(226, 194, 133, 0.7);
+    }
+    .statue { filter: drop-shadow(0 0 10px rgba(226, 194, 133, 0.3)); }
+    .rune {
+      position: absolute;
+      opacity: 0;
+      filter: drop-shadow(0 0 15px rgba(226, 194, 133, 0.8));
+      transition: all 1s;
+    }
+    .rune.collected {
+      opacity: 1;
+      animation: float 3s infinite ease-in-out;
+    }
+    .force-line {
+      stroke: #ff5a5a;
+      stroke-width: 2;
+      filter: drop-shadow(0 0 3px rgba(255, 90, 90, 0.8));
+    }
+    .distance-line {
+      stroke: #e2c285;
+      stroke-width: 1;
+      stroke-dasharray: 5, 3;
+    }
+    .angle-arc {
+      fill: none;
+      stroke: #e2c285;
+      stroke-width: 1;
+    }
+    .input-ancient {
+      background: rgba(20, 12, 5, 0.8);
+      border: 1px solid #c9a55c;
+      color: #e2c285;
+      transition: all 0.3s;
+    }
+    .input-ancient:focus {
+      border-color: #e2c285;
+      box-shadow: 0 0 10px rgba(226, 194, 133, 0.5);
+      outline: none;
+    }
+    .scroll {
+      background: linear-gradient(to right, rgba(61, 38, 15, 0.9), rgba(61, 38, 15, 0.7), rgba(61, 38, 15, 0.9));
+      border-top: 2px solid #c9a55c;
+      border-bottom: 2px solid #c9a55c;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes glow {
+      0%, 100% { filter: drop-shadow(0 0 5px rgba(226, 194, 133, 0.5)); }
+      50% { filter: drop-shadow(0 0 20px rgba(226, 194, 133, 0.8)); }
+    }
+    .statue-glow { animation: glow 2s infinite ease-in-out; }
+    .progress-bar {
+      height: 8px;
+      background: linear-gradient(to right, #c9a55c, #e2c285);
+      transition: width 0.5s ease-in-out;
+    }
+    .tooltip {
+      position: relative;
+      display: inline-block;
+      cursor: help;
+    }
+    .tooltip .tooltip-text {
+      visibility: hidden;
+      width: 200px;
+      background: rgba(20, 12, 5, 0.95);
+      border: 1px solid #c9a55c;
+      color: #e2c285;
+      text-align: center;
+      padding: 8px;
+      border-radius: 4px;
+      position: absolute;
+      z-index: 1;
+      bottom: 125%;
+      left: 50%;
+      margin-left: -100px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .tooltip:hover .tooltip-text {
+      visibility: visible;
+      opacity: 1;
+    }
+    .level-image {
+      max-height: 300px;
+      width: 100%;
+      object-fit: contain;
+      border: 2px solid #c9a55c;
+      border-radius: 8px;
+      margin: 1rem 0;
+    }
+    .hint-button {
+      background: linear-gradient(to bottom, #8c6d39, #5a4a2d);
+      border: 1px solid #c9a55c;
+      color: #e2c285;
+      transition: all 0.3s;
+    }
+    .hint-button:hover {
+      background: linear-gradient(to bottom, #c9a55c, #8c6d39);
+      box-shadow: 0 0 10px rgba(226, 194, 133, 0.5);
+    }
+    .hint-content {
+      display: none;
+      background: rgba(20, 12, 5, 0.8);
+      border: 1px solid #c9a55c;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body class="temple-bg min-h-screen">
+  <a href="../index.html" class="fixed top-3 left-3 z-50 bg-[rgba(20,12,5,0.85)] border border-[#c9a55c] text-[#e2c285] text-sm px-3 py-1.5 rounded-full hover:bg-[rgba(61,38,15,0.9)]">◂ 系列大廳</a>
+
+  <div id="game-container" class="container mx-auto px-4 py-8 max-w-6xl">
+    <!-- Title Section -->
+    <div class="text-center mb-8">
+      <h1 class="text-4xl md:text-5xl font-bold gold-text mb-2">巨人神殿：生物力學之謎</h1>
+      <p class="text-lg md:text-xl">設計者：陳育詮 | 編修：松山高中物理科</p>
+    </div>
+
+    <!-- Game Introduction -->
+    <div id="intro-section" class="mb-12">
+      <div class="scroll p-6 rounded-lg mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-center">神殿序章</h2>
+        <p class="mb-4 text-center">神殿深處潛藏著失落的巨人之力。唯有掌握人體肌肉與力矩的奧秘，才能解開四大機關、重啟神殿之心……</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+          <div class="border border-[#c9a55c] rounded-lg p-4">
+            <h3 class="text-xl font-bold mb-2 text-center">📏 距離單位：古靈寸</h3>
+            <p class="text-sm">「古靈寸」為遠古巨人文明所使用的長度單位，常出現在古碑與機關刻紋中，具神秘象徵意涵。</p>
+          </div>
+          <div class="border border-[#c9a55c] rounded-lg p-4">
+            <h3 class="text-xl font-bold mb-2 text-center">⚖️ 重量單位：古靈重</h3>
+            <p class="text-sm">「古靈重」是巨人衡量物體質量的單位，經常用來描述石塊、雕像、身體部位的重量。</p>
+          </div>
+          <div class="border border-[#c9a55c] rounded-lg p-4">
+            <h3 class="text-xl font-bold mb-2 text-center">💪 力量單位：古靈力</h3>
+            <p class="text-sm">「古靈力」則是衡量肌肉張力與神殿機關所需推動力量的單位。所有神殿機構均以此單位設計，需精準對應才能觸發機制。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="text-center">
+        <button id="start-game" class="ancient-button px-8 py-3 rounded-lg text-xl font-bold">進入神殿</button>
+      </div>
+    </div>
+
+    <!-- Level Selection -->
+    <div id="level-selection" class="hidden mb-12">
+      <h2 class="text-2xl font-bold mb-6 text-center">選擇挑戰關卡</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Level 1 -->
+        <div id="level-1-card" class="level-card rounded-lg p-4 cursor-pointer active">
+          <div class="text-center mb-4">
+            <div class="text-3xl mb-2">⚔️</div>
+            <h3 class="text-xl font-bold">第一關：二頭肌之力</h3>
+          </div>
+          <p class="text-sm mb-4">解開二頭肌的三級槓桿之謎，開啟神殿大門。</p>
+          <div class="flex justify-between items-center">
+            <span class="text-sm">難度：★☆☆</span>
+            <span id="level-1-status" class="text-sm">未完成</span>
+          </div>
+        </div>
+
+        <!-- Level 2 -->
+        <div id="level-2-card" class="level-card rounded-lg p-4 cursor-pointer opacity-50">
+          <div class="text-center mb-4">
+            <div class="text-3xl mb-2">🦾</div>
+            <h3 class="text-xl font-bold">第二關：三頭肌之謎</h3>
+          </div>
+          <p class="text-sm mb-4">掌握三頭肌的一級槓桿系統，喚醒沉睡的守護者。</p>
+          <div class="flex justify-between items-center">
+            <span class="text-sm">難度：★★☆</span>
+            <span id="level-2-status" class="text-sm">未解鎖</span>
+          </div>
+        </div>
+
+        <!-- Level 3 -->
+        <div id="level-3-card" class="level-card rounded-lg p-4 cursor-pointer opacity-50">
+          <div class="text-center mb-4">
+            <div class="text-3xl mb-2">🧍‍♂️</div>
+            <h3 class="text-xl font-bold">第三關：硬舉之重</h3>
+          </div>
+          <p class="text-sm mb-4">解析硬舉中的二級槓桿力學，激活沉睡的守護者。</p>
+          <div class="flex justify-between items-center">
+            <span class="text-sm">難度：★★★</span>
+            <span id="level-3-status" class="text-sm">未解鎖</span>
+          </div>
+        </div>
+
+        <!-- Level 4 -->
+        <div id="level-4-card" class="level-card rounded-lg p-4 cursor-pointer opacity-50">
+          <div class="text-center mb-4">
+            <div class="text-3xl mb-2">🦶</div>
+            <h3 class="text-xl font-bold">第四關：阿基里斯之踮</h3>
+          </div>
+          <p class="text-sm mb-4">破解阿基里斯腱的生物力學奧秘，開啟通往星空的神秘之門。</p>
+          <div class="flex justify-between items-center">
+            <span class="text-sm">難度：★★★★</span>
+            <span id="level-4-status" class="text-sm">未解鎖</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-8 text-center">
+        <div class="mb-4">
+          <span class="text-lg font-bold">收集進度：</span>
+          <span id="rune-count">0/4</span>
+        </div>
+        <div class="w-full max-w-md mx-auto bg-[#1a1308] h-2 rounded-full overflow-hidden">
+          <div id="progress-bar" class="progress-bar w-0 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Level Content -->
+    <div id="level-content" class="hidden">
+      <!-- Level 1: Biceps -->
+      <div id="level-1" class="level-container">
+        <div class="flex justify-between items-center mb-6">
+          <button class="ancient-button px-4 py-2 rounded-lg back-to-levels">返回選擇</button>
+          <h2 class="text-2xl font-bold gold-text">第一關：二頭肌之力</h2>
+          <div class="w-24"></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div>
+            <div class="scroll p-4 rounded-lg mb-6">
+              <h3 class="text-xl font-bold mb-2">🎭 背景故事</h3>
+              <p class="text-sm mb-4">神殿入口處矗立著一座金色巨人雕像，右臂彎曲呈現經典的二頭肌屈肘姿勢，手掌中托著一顆刻有古老符文的石塊。只有理解肱二頭肌力矩平衡的智者，才能開啟神殿大門。</p>
+            </div>
+
+            <img src="https://www.sssh.tp.edu.tw/ischool/wr/file/21/6292/1006ef27371d695ed569e5f00d985586.jpg" alt="二頭肌示意圖" class="level-image">
+
+            <div class="border border-[#c9a55c] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">📐 已知條件</h3>
+              <ul class="list-disc list-inside text-sm space-y-2">
+                <li><span class="font-bold">分析系統：前臂</span></li>
+                <li>重物與肘的距離 = 30 古靈寸</li>
+                <li>二頭肌與肘的距離 = 5 古靈寸</li>
+                <li>二頭肌極限張力 = 270 古靈力</li>
+                <li>前臂重量忽略不計</li>
+              </ul>
+            </div>
+
+            <div class="border border-[#c9a55c] bg-[rgba(61,38,15,0.5)] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">教學提示</h3>
+              <p class="text-sm italic">
+                <span class="font-bold">力矩平衡原理</span>：所有平衡系統的關鍵在於力矩的平衡。力矩等於力乘以力臂（垂直距離）。當系統處於平衡狀態時，順時針力矩總和等於逆時針力矩總和。
+                對於巨人手臂而言：<span class="font-bold">重物力矩</span> = 重物重量 × 距離支點長度，而<span class="font-bold">肌肉力矩</span> = 肌肉拉力 × 距離支點長度。
+              </p>
+            </div>
+
+            <div class="border border-[#c9a55c] bg-[rgba(20,12,5,0.5)] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">「巨人之語」提示系統</h3>
+              <button class="hint-button px-4 py-2 rounded-lg w-full text-left flex justify-between items-center" onclick="toggleHint('hint-1')">
+                <span>點擊查看提示</span>
+                <span>▼</span>
+              </button>
+              <div id="hint-1" class="hint-content">
+                <p class="text-sm italic">
+                  二頭肌系統是典型的三級槓桿，也是人體最常見的槓桿類型。在三級槓桿中，施力點位於阻力點和支點之間。這種設計雖然需要較大的肌肉力量，但能實現更大的運動範圍和更快的速度。
+                </p>
+                <p class="text-sm italic mt-2">
+                  在這個問題中，我們需要應用力矩平衡原理。當手臂處於平衡狀態時：
+                  <br>- 重物產生的力矩 = W × 30 古靈寸
+                  <br>- 二頭肌產生的力矩 = 270 古靈力 × 5 古靈寸
+                  <br>- 平衡時，這兩個力矩相等
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="border border-[#c9a55c] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-4">❓ 問題</h3>
+              <p class="mb-4">請你調整石塊重量W，使二頭肌所受拉力剛好達到極限值270古靈力。此時石塊有多重？</p>
+
+              <div class="flex items-center space-x-4 mb-4">
+                <input type="number" id="level-1-answer" class="input-ancient px-4 py-2 rounded-lg w-32" placeholder="古靈重" />
+                <button id="level-1-check" class="ancient-button px-6 py-2 rounded-lg">確認答案</button>
+              </div>
+
+              <div id="level-1-feedback" class="mt-4 hidden"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Level 2: Triceps -->
+      <div id="level-2" class="level-container hidden">
+        <div class="flex justify-between items-center mb-6">
+          <button class="ancient-button px-4 py-2 rounded-lg back-to-levels">返回選擇</button>
+          <h2 class="text-2xl font-bold gold-text">第二關：三頭肌之謎</h2>
+          <div class="w-24"></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div>
+            <div class="scroll p-4 rounded-lg mb-6">
+              <h3 class="text-xl font-bold mb-2">🎭 背景故事</h3>
+              <p class="text-sm mb-4">神殿深處，金色巨人雕像將手臂斜向上舉起，托起一顆巨大的石球。前臂與重力方向呈60度角，展現了三頭肌的強大力量。只有掌握三頭肌力學系統的勇者，才能喚醒這位沉睡的守護者。</p>
+            </div>
+
+            <img src="https://www.sssh.tp.edu.tw/ischool/wr/file/21/6292/4ab11ccdeb8af7c1fc374ac9b9ef3120.jpg" alt="三頭肌示意圖" class="level-image">
+
+            <div class="border border-[#c9a55c] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">📐 已知條件</h3>
+              <ul class="list-disc list-inside text-sm space-y-2">
+                <li><span class="font-bold">分析系統：上臂</span></li>
+                <li>石球與肘的直線距離 = 30 古靈寸</li>
+                <li>前臂與重力方向夾角 = 60度</li>
+                <li>三頭肌與肘的距離 = 5 古靈寸</li>
+                <li>三頭肌極限張力 = 300 古靈力</li>
+                <li>前臂重量忽略不計</li>
+              </ul>
+            </div>
+
+            <div class="border border-[#c9a55c] bg-[rgba(61,38,15,0.5)] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">教學提示</h3>
+              <p class="text-sm italic">
+                三頭肌系統在此姿勢下形成一級槓桿，支點位於施力點和阻力點之間。需注意角度造成的力分解效應，以及石球重量在水平方向產生的力矩。
+              </p>
+            </div>
+
+            <div class="border border-[#c9a55c] bg-[rgba(20,12,5,0.5)] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">「巨人之語」提示系統</h3>
+              <button class="hint-button px-4 py-2 rounded-lg w-full text-left flex justify-between items-center" onclick="toggleHint('hint-2')">
+                <span>點擊查看提示</span>
+                <span>▼</span>
+              </button>
+              <div id="hint-2" class="hint-content">
+                <p class="text-sm italic">
+                  當手臂呈60度角舉起時，石球的重力會分解為垂直於前臂和平行於前臂兩個分量。只有垂直於前臂的分量才會產生力矩。需使用力的分解原理：垂直力分量 = W × sin(60°) = W × 0.866
+                </p>
+                <p class="text-sm italic mt-2">
+                  在這個問題中，我們需要考慮角度因素：
+                  <br>- 石球重力產生的有效力矩 = W × sin(60°) × 30 古靈寸
+                  <br>- 三頭肌產生的力矩 = 300 古靈力 × 5 古靈寸
+                  <br>- 平衡時，這兩個力矩相等
+                  <br>- 注意sin(60°) = 0.866
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="border border-[#c9a55c] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-4">❓ 問題</h3>
+              <p class="mb-4">請你調整石球重量W，使三頭肌拉力剛好達到極限值300古靈力。此時石球有多重？</p>
+
+              <div class="flex items-center space-x-4 mb-4">
+                <input type="number" id="level-2-answer" class="input-ancient px-4 py-2 rounded-lg w-32" placeholder="古靈重" />
+                <button id="level-2-check" class="ancient-button px-6 py-2 rounded-lg">確認答案</button>
+              </div>
+
+              <div id="level-2-feedback" class="mt-4 hidden"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Level 3: Deadlift -->
+      <div id="level-3" class="level-container hidden">
+        <div class="flex justify-between items-center mb-6">
+          <button class="ancient-button px-4 py-2 rounded-lg back-to-levels">返回選擇</button>
+          <h2 class="text-2xl font-bold gold-text">第三關：硬舉之重</h2>
+          <div class="w-24"></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div>
+            <div class="scroll p-4 rounded-lg mb-6">
+              <h3 class="text-xl font-bold mb-2">🎭 背景故事</h3>
+              <p class="text-sm mb-4">神殿中央，一尊巨大的金色巨人雕像正展示著完美的硬舉姿態，上半身水平前傾，雙腿微彎，一手握著沉重的石球。這個姿勢展現了臀肌與脊背肌群的強大力量，形成了典型的二級槓桿系統。只有真正理解力學平衡的智者，才能激活這位沉睡的守護者。</p>
+            </div>
+
+            <img src="https://www.sssh.tp.edu.tw/ischool/wr/file/21/6292/2f6b75f6066c2f31a26c3083ed5c7ea3.jpg" alt="硬舉示意圖" class="level-image">
+
+            <div class="border border-[#c9a55c] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">📐 已知條件</h3>
+              <ul class="list-disc list-inside text-sm space-y-2">
+                <li><span class="font-bold">分析系統：上半身</span></li>
+                <li>上半身重量 = 300 古靈重（重心距髖關節40古靈寸）</li>
+                <li>石球重量 = W 古靈重（距髖關節60古靈寸）</li>
+                <li>臀部和後腿肌群與髖關節的距離 = 8 古靈寸</li>
+                <li>臀肌極限張力 = 2250 古靈力</li>
+                <li>支點位於髖關節處</li>
+              </ul>
+            </div>
+
+            <div class="border border-[#c9a55c] bg-[rgba(61,38,15,0.5)] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">教學提示</h3>
+              <p class="text-sm italic">
+                硬舉動作展示了二級槓桿原理，支點在髖關節，阻力點（上半身重心和石球）位於支點和施力點（臀肌）之間。在此系統中，需同時考慮上半身自重和石球重量對髖關節產生的力矩。
+              </p>
+            </div>
+
+            <div class="border border-[#c9a55c] bg-[rgba(20,12,5,0.5)] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">「巨人之語」提示系統</h3>
+              <button class="hint-button px-4 py-2 rounded-lg w-full text-left flex justify-between items-center" onclick="toggleHint('hint-3')">
+                <span>點擊查看提示</span>
+                <span>▼</span>
+              </button>
+              <div id="hint-3" class="hint-content">
+                <p class="text-sm italic">
+                  二級槓桿系統中，阻力點位於支點和施力點之間。這是人體中最省力的槓桿系統，能夠應對較大的負荷。在硬舉動作中，臀肌和豎脊肌共同作用，產生強大的伸髖力量。
+                </p>
+                <p class="text-sm italic mt-2">
+                  在這個問題中，我們需要考慮兩個力矩來源：
+                  <br>- 上半身重量產生的力矩 = 300 古靈重 × 40 古靈寸
+                  <br>- 石球產生的力矩 = W × 60 古靈寸
+                  <br>- 臀肌產生的力矩 = 2250 古靈力 × 8 古靈寸
+                  <br>- 平衡時，臀肌力矩等於上半身力矩加石球力矩
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="border border-[#c9a55c] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-4">❓ 問題</h3>
+              <p class="mb-4">請你調整石球重量W，使臀肌拉力剛好達到極限值2250古靈力。此時石球有多重？</p>
+
+              <div class="flex items-center space-x-4 mb-4">
+                <input type="number" id="level-3-answer" class="input-ancient px-4 py-2 rounded-lg w-32" placeholder="古靈重" />
+                <button id="level-3-check" class="ancient-button px-6 py-2 rounded-lg">確認答案</button>
+              </div>
+
+              <div id="level-3-feedback" class="mt-4 hidden"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Level 4: Achilles -->
+      <div id="level-4" class="level-container hidden">
+        <div class="flex justify-between items-center mb-6">
+          <button class="ancient-button px-4 py-2 rounded-lg back-to-levels">返回選擇</button>
+          <h2 class="text-2xl font-bold gold-text">第四關：阿基里斯之踮</h2>
+          <div class="w-24"></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div>
+            <div class="scroll p-4 rounded-lg mb-6">
+              <h3 class="text-xl font-bold mb-2">🎭 背景故事</h3>
+              <p class="text-sm mb-4">神殿最深處，一尊踮起腳尖的金色巨人雕像矗立於神秘祭壇上。腳掌與地面呈60°角，腳底板展現出阿基里斯腱與腳踝間的精妙力學平衡。只有真正理解腳部生物力學的智者，才能啟動通往星空的神秘之門。</p>
+            </div>
+
+            <img src="https://www.sssh.tp.edu.tw/ischool/wr/file/21/6292/905370107661ebb95a602520966ec90d.jpg" alt="阿基里斯腱示意圖" class="level-image">
+
+            <div class="border border-[#c9a55c] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">📐 已知條件</h3>
+              <ul class="list-disc list-inside text-sm space-y-2">
+                <li><span class="font-bold">分析系統：腳底板</span></li>
+                <li>身體重量 = W 古靈重（重心垂直投影落在拇指球上）</li>
+                <li>支點位於跟骨處</li>
+                <li>腳掌與地面夾角 = 60°</li>
+                <li>阿基里斯腱與腳板方向夾角 = 120°</li>
+                <li>阿基里斯腱距離跟骨支點 = 1 古靈寸</li>
+                <li>拇指球距離跟骨支點 = 20 古靈寸</li>
+                <li>阿基里斯腱極限張力 = 3000 古靈力</li>
+              </ul>
+            </div>
+
+            <div class="border border-[#c9a55c] bg-[rgba(61,38,15,0.5)] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">教學提示</h3>
+              <p class="text-sm italic">
+                踮腳動作是一個一級槓桿系統，支點在跟骨，施力點在阿基里斯腱連接處，阻力點在拇指球（身體重心投影處）。在力矩分析中，需要計算阿基里斯腱拉力垂直於腳掌的分量，以及這個力對支點的力矩。
+              </p>
+            </div>
+
+            <div class="border border-[#c9a55c] bg-[rgba(20,12,5,0.5)] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-2">「巨人之語」提示系統</h3>
+              <button class="hint-button px-4 py-2 rounded-lg w-full text-left flex justify-between items-center" onclick="toggleHint('hint-4')">
+                <span>點擊查看提示</span>
+                <span>▼</span>
+              </button>
+              <div id="hint-4" class="hint-content">
+                <p class="text-sm italic">
+                  腳踮起時，腳底板以跟骨為支點形成一級槓桿。關鍵在於力的方向與分解。當阿基里斯腱與腳板成120°角時，只有垂直於腳板的力分量才能產生有效力矩。這是為何腱的連接角度對肌肉力學效率至關重要。
+                </p>
+                <p class="text-sm italic mt-2">
+                  力學分析步驟：
+                  <br>1. 阿基里斯腱與腳板夾角為120°，其垂直於腳板的力分量為：
+                  <br>   F_垂直 = 3000 × sin(120°) = 3000 × 0.866 = 2598 古靈力
+                  <br>2. 阿基里斯腱距離支點的力臂：1 古靈寸
+                  <br>   阿基里斯腱產生的力矩：2598 × 1 = 2598 古靈寸·力
+                  <br>3. 重物距離支點的力臂：20 古靈寸
+                  <br>   重物產生的力矩：W × 20 = 20W 古靈寸·力
+                  <br>4. 根據力矩平衡原理：
+                  <br>   阿基里斯腱力矩 = 重物力矩
+                  <br>   2598 = 20W
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="border border-[#c9a55c] rounded-lg p-4 mb-6">
+              <h3 class="text-xl font-bold mb-4">❓ 問題</h3>
+              <p class="mb-4">請你調整身體重量W，使阿基里斯腱張力剛好達到極限值3000古靈力。此時身體有多重？</p>
+
+              <div class="flex items-center space-x-4 mb-4">
+                <input type="number" id="level-4-answer" class="input-ancient px-4 py-2 rounded-lg w-32" placeholder="古靈重" />
+                <button id="level-4-check" class="ancient-button px-6 py-2 rounded-lg">確認答案</button>
+              </div>
+
+              <div id="level-4-feedback" class="mt-4 hidden"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Completion Screen -->
+    <div id="completion-screen" class="hidden text-center py-12">
+      <h2 class="text-4xl font-bold gold-text mb-8">神殿之心已重啟！</h2>
+
+      <div class="relative w-64 h-64 mx-auto mb-8">
+        <svg class="statue-glow w-full h-full" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="40" fill="none" stroke="#e2c285" stroke-width="2" />
+          <path d="M30,50 L70,50 M50,30 L50,70 M30,30 L70,70 M30,70 L70,30" stroke="#e2c285" stroke-width="2" />
+          <circle cx="50" cy="50" r="20" fill="none" stroke="#e2c285" stroke-width="2" />
+          <circle cx="50" cy="50" r="10" fill="#e2c285" />
+        </svg>
+      </div>
+
+      <p class="text-xl mb-6">恭喜你成功解開所有謎題，獲得了巨人的祝福！</p>
+
+      <div class="mb-8">
+        <h3 class="text-2xl font-bold mb-4">你的成就</h3>
+        <ul class="space-y-2 max-w-md mx-auto text-left">
+          <li class="flex items-center">
+            <span class="text-green-400 mr-2">✅</span> 掌握了二頭肌的三級槓桿原理
+          </li>
+          <li class="flex items-center">
+            <span class="text-green-400 mr-2">✅</span> 理解了三頭肌的一級槓桿系統
+          </li>
+          <li class="flex items-center">
+            <span class="text-green-400 mr-2">✅</span> 解析了硬舉中的二級槓桿力學
+          </li>
+          <li class="flex items-center">
+            <span class="text-green-400 mr-2">✅</span> 破解了阿基里斯腱的生物力學奧秘
+          </li>
+        </ul>
+      </div>
+
+      <div class="mb-8 p-6 border border-[#c9a55c] rounded-lg max-w-md mx-auto">
+        <h3 class="text-2xl font-bold mb-2">你的稱號</h3>
+        <p id="final-title" class="text-3xl font-bold gold-text">古靈之魂</p>
+        <p id="title-description" class="mt-2 italic">完美通關，無錯誤！你已徹底掌握了古靈之力，成為真正的神殿守護者！</p>
+        <p id="best-record" class="mt-3 text-sm hidden"></p>
+      </div>
+
+      <button id="restart-game" class="ancient-button px-8 py-3 rounded-lg text-xl font-bold">重新挑戰</button>
+    </div>
+  </div>
+  <script>
+    'use strict';
+
+    function toggleHint(hintId) {
+      const hintContent = document.getElementById(hintId);
+      const button = hintContent.previousElementSibling;
+      const arrow = button.querySelector('span:last-child');
+
+      if (hintContent.style.display === 'block') {
+        hintContent.style.display = 'none';
+        arrow.textContent = '▼';
+      } else {
+        hintContent.style.display = 'block';
+        arrow.textContent = '▲';
+      }
+    }
+
+    // ===== 系列進度（localStorage，與大廳共用）=====
+    const STORE_KEY = 'sssh-physics-series-v1';
+    function loadStore() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; }
+    }
+    function saveSeriesProgress(patch) {
+      try {
+        const s = loadStore();
+        s.titans = Object.assign({}, s.titans, patch);
+        localStorage.setItem(STORE_KEY, JSON.stringify(s));
+      } catch (e) { /* 私密模式等情況下靜默略過 */ }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      // Game state
+      const gameState = {
+        currentLevel: 0,
+        completedLevels: [],
+        attempts: 0,
+        wrongAttempts: 0,
+        runesCollected: 0
+      };
+
+      // Correct answers
+      const answers = {
+        1: 45,  // Level 1: Biceps
+        2: 58,  // Level 2: Triceps (rounded from 57.7)
+        3: 100, // Level 3: Deadlift
+        4: 130  // Level 4: Achilles
+      };
+
+      // Titles based on wrong attempts
+      const titles = [
+        { title: "古靈之魂", description: "完美通關，無錯誤！你已徹底掌握了古靈之力，成為真正的神殿守護者！", maxWrong: 0 },
+        { title: "生物力學師", description: "僅有1次錯誤，你對生物力學的理解已接近完美！", maxWrong: 1 },
+        { title: "力矩操控者", description: "有2-3次錯誤，你已熟練掌握力矩原理！", maxWrong: 3 },
+        { title: "肌力見習生", description: "有4-6次錯誤，你對肌肉力學有了基本理解。", maxWrong: 6 },
+        { title: "神殿學徒", description: "有7-9次錯誤，繼續努力，你將成為真正的力學大師！", maxWrong: 9 },
+        { title: "巨人探索者", description: "有10次以上錯誤，但你堅持不懈，終於完成了挑戰！", maxWrong: Infinity }
+      ];
+
+      // Navigation functions
+      function showSection(sectionId) {
+        document.querySelectorAll('#game-container > div').forEach(div => {
+          div.classList.add('hidden');
+        });
+        document.getElementById(sectionId).classList.remove('hidden');
+      }
+
+      function showLevel(levelNum) {
+        document.querySelectorAll('.level-container').forEach(level => {
+          level.classList.add('hidden');
+        });
+        document.getElementById(`level-${levelNum}`).classList.remove('hidden');
+        gameState.currentLevel = levelNum;
+      }
+
+      // 標記關卡完成的 UI 更新（新完成與還原共用）
+      function markLevelCompletedUI(levelNum) {
+        document.getElementById(`level-${levelNum}-status`).textContent = "已完成";
+        document.getElementById(`level-${levelNum}-card`).classList.add('completed');
+        if (levelNum < 4) {
+          document.getElementById(`level-${levelNum + 1}-card`).classList.remove('opacity-50');
+          if (!gameState.completedLevels.includes(levelNum + 1)) {
+            document.getElementById(`level-${levelNum + 1}-status`).textContent = "已解鎖";
+          }
+        }
+      }
+
+      function updateRuneDisplay() {
+        document.getElementById('rune-count').textContent = `${gameState.runesCollected}/4`;
+        document.getElementById('progress-bar').style.width = `${gameState.runesCollected * 25}%`;
+      }
+
+      // Start game button
+      document.getElementById('start-game').addEventListener('click', function() {
+        showSection('level-selection');
+      });
+
+      // Level selection
+      document.getElementById('level-1-card').addEventListener('click', function() {
+        showSection('level-content');
+        showLevel(1);
+      });
+
+      document.getElementById('level-2-card').addEventListener('click', function() {
+        if (gameState.completedLevels.includes(1)) {
+          showSection('level-content');
+          showLevel(2);
+        }
+      });
+
+      document.getElementById('level-3-card').addEventListener('click', function() {
+        if (gameState.completedLevels.includes(2)) {
+          showSection('level-content');
+          showLevel(3);
+        }
+      });
+
+      document.getElementById('level-4-card').addEventListener('click', function() {
+        if (gameState.completedLevels.includes(3)) {
+          showSection('level-content');
+          showLevel(4);
+        }
+      });
+
+      // Back to levels buttons
+      document.querySelectorAll('.back-to-levels').forEach(button => {
+        button.addEventListener('click', function() {
+          showSection('level-selection');
+        });
+      });
+
+      // Check answer
+      function checkAnswer(levelNum, userAnswer) {
+        const feedbackElement = document.getElementById(`level-${levelNum}-feedback`);
+        feedbackElement.classList.remove('hidden');
+
+        // 修復：已完成的關卡重複提交不再計分（避免灌高錯誤次數影響稱號）
+        if (gameState.completedLevels.includes(levelNum)) {
+          feedbackElement.innerHTML = `<div class="p-3 bg-green-900 border border-green-500 rounded-lg text-green-300">
+            <p class="font-bold">✅ 此關已完成</p>
+            <p>符文已收集，請前往其他關卡。</p>
+          </div>`;
+          return;
+        }
+
+        gameState.attempts++;
+        const correctAnswer = answers[levelNum];
+
+        // Allow for small rounding errors
+        const isCorrect = Math.abs(userAnswer - correctAnswer) <= 1;
+
+        if (isCorrect) {
+          feedbackElement.innerHTML = `<div class="p-3 bg-green-900 border border-green-500 rounded-lg text-green-300">
+            <p class="font-bold">✅ 正確！</p>
+            <p>答案為 ${correctAnswer} 古靈重。</p>
+          </div>`;
+
+          gameState.completedLevels.push(levelNum);
+          gameState.runesCollected++;
+          markLevelCompletedUI(levelNum);
+          updateRuneDisplay();
+
+          // 系列進度
+          saveSeriesProgress({
+            runes: gameState.runesCollected,
+            completedLevels: gameState.completedLevels,
+            wrongAttempts: gameState.wrongAttempts
+          });
+
+          if (gameState.completedLevels.length === 4) {
+            // 全破：計算稱號並存最佳紀錄
+            const rank = titles.findIndex(t => gameState.wrongAttempts <= t.maxWrong);
+            const titleObj = titles[rank];
+            const prev = loadStore().titans || {};
+            const patch = { completed: true, lastWrongAttempts: gameState.wrongAttempts };
+            if (!(Number.isFinite(prev.bestTitleRank)) || rank < prev.bestTitleRank) {
+              patch.bestTitleRank = rank;
+              patch.bestTitle = titleObj.title;
+            }
+            saveSeriesProgress(patch);
+
+            setTimeout(() => {
+              showSection('completion-screen');
+              document.getElementById('final-title').textContent = titleObj.title;
+              document.getElementById('title-description').textContent = titleObj.description;
+
+              const bestEl = document.getElementById('best-record');
+              if (Number.isFinite(prev.bestTitleRank)) {
+                bestEl.textContent = rank < prev.bestTitleRank
+                  ? `🎊 刷新歷史最佳稱號！（先前：${prev.bestTitle}）`
+                  : `歷史最佳稱號：${prev.bestTitle}`;
+                bestEl.classList.remove('hidden');
+              }
+            }, 2000);
+          } else {
+            setTimeout(() => {
+              showSection('level-selection');
+            }, 2000);
+          }
+        } else {
+          gameState.wrongAttempts++;
+          saveSeriesProgress({ wrongAttempts: gameState.wrongAttempts });
+          feedbackElement.innerHTML = `<div class="p-3 bg-red-900 border border-red-500 rounded-lg text-red-300">
+            <p class="font-bold">❌ 不正確</p>
+            <p>請重新計算力矩平衡。</p>
+          </div>`;
+        }
+      }
+
+      // Level checks
+      [1, 2, 3, 4].forEach(levelNum => {
+        document.getElementById(`level-${levelNum}-check`).addEventListener('click', function() {
+          const userAnswer = parseFloat(document.getElementById(`level-${levelNum}-answer`).value);
+          if (!isNaN(userAnswer)) {
+            checkAnswer(levelNum, userAnswer);
+          }
+        });
+      });
+
+      // Restart game
+      document.getElementById('restart-game').addEventListener('click', function() {
+        gameState.currentLevel = 0;
+        gameState.completedLevels = [];
+        gameState.attempts = 0;
+        gameState.wrongAttempts = 0;
+        gameState.runesCollected = 0;
+
+        document.querySelectorAll('.level-card').forEach((card, index) => {
+          if (index === 0) {
+            card.classList.remove('opacity-50', 'completed');
+            card.classList.add('active');
+          } else {
+            card.classList.add('opacity-50');
+            card.classList.remove('completed', 'active');
+          }
+        });
+
+        document.querySelectorAll('[id$="-status"]').forEach((status, index) => {
+          status.textContent = index === 0 ? "未完成" : "未解鎖";
+        });
+
+        document.querySelectorAll('[id$="-answer"]').forEach(input => {
+          input.value = "";
+        });
+
+        document.querySelectorAll('[id$="-feedback"]').forEach(feedback => {
+          feedback.classList.add('hidden');
+        });
+
+        document.getElementById('best-record').classList.add('hidden');
+        updateRuneDisplay();
+
+        // 系列進度：清空本輪，保留歷史最佳
+        saveSeriesProgress({ runes: 0, completedLevels: [], wrongAttempts: 0 });
+
+        showSection('level-selection');
+      });
+
+      // Enter key for answer submission
+      document.querySelectorAll('[id$="-answer"]').forEach(input => {
+        input.addEventListener('keypress', function(e) {
+          if (e.key === 'Enter') {
+            const levelNum = parseInt(this.id.split('-')[1]);
+            document.getElementById(`level-${levelNum}-check`).click();
+          }
+        });
+      });
+
+      // ===== 還原上次進度 =====
+      (function restoreProgress() {
+        const saved = loadStore().titans;
+        if (saved && Array.isArray(saved.completedLevels) && saved.completedLevels.length > 0 && saved.completedLevels.length < 4) {
+          gameState.completedLevels = saved.completedLevels.slice();
+          gameState.runesCollected = gameState.completedLevels.length;
+          gameState.wrongAttempts = saved.wrongAttempts || 0;
+          gameState.completedLevels.forEach(markLevelCompletedUI);
+          updateRuneDisplay();
+        }
+      })();
+
+      // 測試掛鉤（不影響遊戲）
+      window.__debug = { gameState, answers, titles };
+    });
+  </script>
+</body>
+</html>

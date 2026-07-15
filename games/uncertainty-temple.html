@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>不確定度神殿挑戰</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+            min-height: 100vh;
+        }
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .temple-card {
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        .challenge-card {
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 0.75rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        .challenge-card:hover {
+            box-shadow: 0 8px 25px rgba(26, 42, 108, 0.3);
+            transform: translateY(-5px);
+        }
+        .challenge-card.completed { border: 2px solid #4ade80; }
+        .btn { transition: all 0.3s ease; }
+        .btn:hover:not(:disabled) { transform: translateY(-2px); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .image-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .image-container img { width: 100%; height: 100%; object-fit: cover; }
+        .hint-modal { background-color: rgba(0, 0, 0, 0.7); }
+        .password-input {
+            border: 2px solid #d1d5db;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            transition: all 0.3s ease;
+        }
+        .password-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+            outline: none;
+        }
+        .password-input:disabled { background-color: #f3f4f6; color: #6b7280; }
+        .title-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <a href="../index.html" class="fixed top-3 left-3 z-40 bg-indigo-900/80 border border-indigo-400 text-indigo-100 text-sm px-3 py-1.5 rounded-full hover:bg-indigo-800">◂ 系列大廳</a>
+
+    <div class="temple-card max-w-4xl mx-auto p-6 md:p-8 mt-8 md:mt-0">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-indigo-900 mb-2">🎮 不確定度神殿挑戰</h1>
+            <p class="text-lg text-gray-600"><span class="font-medium">設計者：陳育詮</span> | <span class="font-medium">編修：松山高中物理科</span></p>
+            <div class="w-32 h-1 bg-gradient-to-r from-indigo-500 to-purple-600 mx-auto my-4 rounded-full"></div>
+        </div>
+
+        <!-- Background Story -->
+        <div class="bg-indigo-50 p-4 rounded-lg mb-8">
+            <h2 class="text-xl font-bold text-indigo-800 mb-2">🎭 背景故事</h2>
+            <p class="text-gray-700">你是一位勇敢的物理冒險者，進入了失落的「不確定度神殿」，傳說只要解開五道密碼之謎，就能獲得量測世界的最高奧義：「真理之光」。</p>
+            <p class="text-gray-700 mt-2">每答錯一次，神殿會記錄你的「迷失次數」，結算時給你一個稱號。</p>
+        </div>
+
+        <!-- Title System -->
+        <div class="mb-8">
+            <h2 class="text-xl font-bold text-indigo-800 mb-3">🏷️ 稱號系統</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white rounded-lg overflow-hidden">
+                    <thead class="bg-indigo-100">
+                        <tr>
+                            <th class="py-2 px-4 text-left text-indigo-800">錯誤次數</th>
+                            <th class="py-2 px-4 text-left text-indigo-800">稱號</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-gray-200"><td class="py-2 px-4">0</td><td class="py-2 px-4">📏 精準勇者</td></tr>
+                        <tr class="border-b border-gray-200"><td class="py-2 px-4">1～2</td><td class="py-2 px-4">📐 謹慎探險家</td></tr>
+                        <tr class="border-b border-gray-200"><td class="py-2 px-4">3～4</td><td class="py-2 px-4">🧮 數感學徒</td></tr>
+                        <tr><td class="py-2 px-4">≥5</td><td class="py-2 px-4">🪨 亂量神民</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Game Status -->
+        <div class="bg-gradient-to-r from-purple-100 to-indigo-100 p-4 rounded-lg mb-8 flex justify-between items-center">
+            <div>
+                <p class="text-indigo-800 font-medium">已完成關卡: <span id="completed-challenges">0</span>/5</p>
+                <p class="text-indigo-800 font-medium">錯誤次數: <span id="error-count">0</span></p>
+            </div>
+            <div>
+                <span id="current-title" class="title-badge bg-gray-200 text-gray-700">未獲得稱號</span>
+            </div>
+        </div>
+
+        <!-- Challenges Container -->
+        <div id="challenges-container" class="space-y-6">
+            <!-- Challenge 1 -->
+            <div id="challenge-1" class="challenge-card p-5">
+                <h3 class="text-xl font-bold text-indigo-800 mb-3">🔐 第 1 關｜質量的密碼</h3>
+                <div class="image-container w-full max-w-[350px] h-[250px] mx-auto mb-4">
+                    <img src="https://www.sssh.tp.edu.tw/ischool/wr/file/21/6288/4d5c46663e942fafb692259ef766b3ea.jpg" alt="電子秤顯示 63g">
+                </div>
+                <div class="mt-4">
+                    <p class="text-gray-700 mb-4">📜 題目：如圖（一），欲得知一木塊的密度，因此先以電子秤量測其重量。若多次量測皆顯示相同結果，請記錄為：</p>
+                    <div class="flex flex-wrap items-center gap-2 mb-6">
+                        <input type="text" inputmode="decimal" id="challenge1-value" class="password-input w-24" placeholder="數值">
+                        <span class="text-lg">±</span>
+                        <input type="text" inputmode="decimal" id="challenge1-uncertainty" class="password-input w-24" placeholder="不確定度">
+                        <span class="text-lg">g</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <button id="challenge1-submit" class="btn bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700" onclick="checkChallenge(1)">提交密碼</button>
+                        <button class="btn bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600" onclick="showHint(1)">求救提示</button>
+                    </div>
+                    <div id="challenge1-feedback" class="mt-4 hidden"></div>
+                </div>
+            </div>
+
+            <!-- Challenge 2 -->
+            <div id="challenge-2" class="challenge-card p-5">
+                <h3 class="text-xl font-bold text-indigo-800 mb-3">🔐 第 2 關｜三維尺寸的密碼</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="image-container w-full max-w-[350px] h-[130px] mx-auto">
+                        <img src="https://www.sssh.tp.edu.tw/ischool/wr/file/21/6289/67ac5fef9db3a32cfa66a0622d9c04a6.jpg" alt="量長度">
+                    </div>
+                    <div class="flex justify-center gap-4">
+                        <div class="image-container w-[160px] h-[220px]">
+                            <img src="https://www.sssh.tp.edu.tw/ischool/wr/file/21/6290/84fedac737a267b2efea5e5ca1e376b3.jpg" alt="量寬度">
+                        </div>
+                        <div class="image-container w-[160px] h-[220px]">
+                            <img src="https://www.sssh.tp.edu.tw/ischool/wr/file/21/6291/30213d3f0af53eed72d3a84e6d3ddae3.jpg" alt="量高度">
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-gray-700 mb-4">📜 題目：請寫出此木塊的三個邊長 ± 組合不確定度）：</p>
+                    <div class="space-y-3 mb-6">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="w-12 text-right">長：</span>
+                            <input type="text" inputmode="decimal" id="challenge2-length" class="password-input w-24" placeholder="數值">
+                            <span class="text-lg">±</span>
+                            <input type="text" inputmode="decimal" id="challenge2-length-uncertainty" class="password-input w-24" placeholder="不確定度">
+                            <span class="text-lg">cm</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="w-12 text-right">寬：</span>
+                            <input type="text" inputmode="decimal" id="challenge2-width" class="password-input w-24" placeholder="數值">
+                            <span class="text-lg">±</span>
+                            <input type="text" inputmode="decimal" id="challenge2-width-uncertainty" class="password-input w-24" placeholder="不確定度">
+                            <span class="text-lg">cm</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="w-12 text-right">高：</span>
+                            <input type="text" inputmode="decimal" id="challenge2-height" class="password-input w-24" placeholder="數值">
+                            <span class="text-lg">±</span>
+                            <input type="text" inputmode="decimal" id="challenge2-height-uncertainty" class="password-input w-24" placeholder="不確定度">
+                            <span class="text-lg">cm</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <button id="challenge2-submit" class="btn bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700" onclick="checkChallenge(2)">提交密碼</button>
+                        <button class="btn bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600" onclick="showHint(2)">求救提示</button>
+                    </div>
+                    <div id="challenge2-feedback" class="mt-4 hidden"></div>
+                </div>
+            </div>
+
+            <!-- Challenge 3 -->
+            <div id="challenge-3" class="challenge-card p-5">
+                <h3 class="text-xl font-bold text-indigo-800 mb-3">🔐 第 3 關｜木塊周長的密碼</h3>
+                <div class="mt-4">
+                    <p class="text-gray-700 mb-4">📜 題目：根據上題的長與寬，請輸入<strong>木塊周長（含不確定度）</strong>，格式為：</p>
+                    <div class="flex flex-wrap items-center gap-2 mb-6">
+                        <span class="text-lg">P =</span>
+                        <input type="text" inputmode="decimal" id="challenge3-value" class="password-input w-24" placeholder="數值">
+                        <span class="text-lg">±</span>
+                        <input type="text" inputmode="decimal" id="challenge3-uncertainty" class="password-input w-24" placeholder="不確定度">
+                        <span class="text-lg">cm</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <button id="challenge3-submit" class="btn bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700" onclick="checkChallenge(3)">提交密碼</button>
+                        <button class="btn bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600" onclick="showHint(3)">求救提示</button>
+                    </div>
+                    <div id="challenge3-feedback" class="mt-4 hidden"></div>
+                </div>
+            </div>
+
+            <!-- Challenge 4 -->
+            <div id="challenge-4" class="challenge-card p-5">
+                <h3 class="text-xl font-bold text-indigo-800 mb-3">🔐 第 4 關｜體積與密度的密碼</h3>
+                <div class="mt-4">
+                    <p class="text-gray-700 mb-4">📜 題目：根據你的長、寬、高、質量，請輸入：</p>
+                    <div class="space-y-3 mb-6">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-lg">V =</span>
+                            <input type="text" inputmode="decimal" id="challenge4-volume" class="password-input w-24" placeholder="數值">
+                            <span class="text-lg">±</span>
+                            <input type="text" inputmode="decimal" id="challenge4-volume-uncertainty" class="password-input w-24" placeholder="不確定度">
+                            <span class="text-lg">cm³</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-lg">ρ =</span>
+                            <input type="text" inputmode="decimal" id="challenge4-density" class="password-input w-24" placeholder="數值">
+                            <span class="text-lg">±</span>
+                            <input type="text" inputmode="decimal" id="challenge4-density-uncertainty" class="password-input w-24" placeholder="不確定度">
+                            <span class="text-lg">g/cm³</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <button id="challenge4-submit" class="btn bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700" onclick="checkChallenge(4)">提交密碼</button>
+                        <button class="btn bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600" onclick="showHint(4)">求救提示</button>
+                    </div>
+                    <div id="challenge4-feedback" class="mt-4 hidden"></div>
+                </div>
+            </div>
+
+            <!-- Challenge 5 -->
+            <div id="challenge-5" class="challenge-card p-5">
+                <h3 class="text-xl font-bold text-indigo-800 mb-3">🔐 第 5 關｜銅塊高度的密碼</h3>
+                <div class="mt-4">
+                    <p class="text-gray-700 mb-4">📜 題目：某同學量測銅塊高度四次：25.40、25.70、25.80、25.60 mm</p>
+                    <p class="text-gray-700 mb-4">請計算其平均值與組合不確定度，並輸入：</p>
+                    <div class="flex flex-wrap items-center gap-2 mb-6">
+                        <input type="text" inputmode="decimal" id="challenge5-value" class="password-input w-24" placeholder="平均值">
+                        <span class="text-lg">±</span>
+                        <input type="text" inputmode="decimal" id="challenge5-uncertainty" class="password-input w-24" placeholder="不確定度">
+                        <span class="text-lg">mm</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <button id="challenge5-submit" class="btn bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700" onclick="checkChallenge(5)">提交密碼</button>
+                        <button class="btn bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600" onclick="showHint(5)">求救提示</button>
+                    </div>
+                    <div id="challenge5-feedback" class="mt-4 hidden"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Final Result -->
+        <div id="final-result" class="hidden mt-8 bg-gradient-to-r from-indigo-100 to-purple-100 p-6 rounded-lg text-center">
+            <h2 class="text-2xl font-bold text-indigo-800 mb-4">🏆 結局畫面</h2>
+            <div class="py-4">
+                <p class="text-xl mb-2">🎉 恭喜你完成了《不確定度神殿挑戰》！</p>
+                <p class="text-lg mb-2">🔢 你總共答錯：<span id="final-error-count" class="font-bold">0</span> 次</p>
+                <p class="text-lg mb-4">🏷️ 你獲得的稱號是：<span id="final-title" class="font-bold">精準勇者</span></p>
+                <p class="text-lg">📜 現在，你擁有「量測真理之光」，成為能洞察不確定世界的物理勇者！</p>
+                <p id="best-record" class="text-sm text-indigo-700 mt-3 hidden"></p>
+            </div>
+            <button class="btn mt-4 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 text-lg" onclick="resetGame()">重新挑戰</button>
+        </div>
+    </div>
+
+    <!-- Hint Modals -->
+    <div id="hint-modal-1" class="hint-modal fixed inset-0 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 class="text-xl font-bold text-indigo-800 mb-4">📘 不確定度補充</h3>
+            <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                <p class="mb-2 font-medium">組合不確定度計算：</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li>u<sub>A</sub> = s / sqrt(n)</li>
+                    <li>u<sub>B</sub> = LC / sqrt(12)</li>
+                    <li>u<sub>C</sub> = sqrt(u<sub>A</sub>² + u<sub>B</sub>²)</li>
+                </ul>
+                <p class="mt-3 mb-2">若多次量測皆相同 → 推估為儀器刻度不確定度（B 類）</p>
+            </div>
+            <div class="bg-amber-50 p-4 rounded-lg">
+                <p class="mb-2 font-medium">✨ 有效位數原則：</p>
+                <ul class="list-disc pl-5">
+                    <li>不確定度：保留 2 位有效數字（無條件進位）</li>
+                    <li>測量值：小數位需與不確定度一致</li>
+                </ul>
+            </div>
+            <button class="btn mt-6 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 w-full" onclick="closeHint(1)">了解</button>
+        </div>
+    </div>
+
+    <div id="hint-modal-2" class="hint-modal fixed inset-0 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 class="text-xl font-bold text-indigo-800 mb-4">📘 單次量測的不確定度計算</h3>
+            <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                <p class="mb-2">因只量一次，屬於 B 類不確定度：</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li>LC = 0.1 cm</li>
+                    <li>u = LC / sqrt(12) = 約 0.029 cm</li>
+                </ul>
+                <p class="mt-3">組合不確定度：僅來自儀器刻度</p>
+            </div>
+            <div class="bg-amber-50 p-4 rounded-lg">
+                <p>主測量值小數位需與 u 一致（尾數對齊）</p>
+            </div>
+            <button class="btn mt-6 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 w-full" onclick="closeHint(2)">了解</button>
+        </div>
+    </div>
+
+    <div id="hint-modal-3" class="hint-modal fixed inset-0 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 class="text-xl font-bold text-indigo-800 mb-4">📘 加法誤差傳播定律</h3>
+            <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                <p class="mb-2">周長公式：P = 2L + 2W</p>
+                <p>不確定度：u<sub>P</sub> = sqrt((2u<sub>L</sub>)² + (2u<sub>W</sub>)²)</p>
+            </div>
+            <div class="bg-amber-50 p-4 rounded-lg">
+                <p>✨ 小數位需與 u<sub>P</sub> 對齊</p>
+            </div>
+            <button class="btn mt-6 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 w-full" onclick="closeHint(3)">了解</button>
+        </div>
+    </div>
+
+    <div id="hint-modal-4" class="hint-modal fixed inset-0 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 class="text-xl font-bold text-indigo-800 mb-4">📘 乘除法誤差傳播定律</h3>
+            <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                <p class="mb-2 font-medium">體積：V = L × W × H</p>
+                <p class="mb-3">u<sub>V</sub> / V = sqrt( (u<sub>L</sub>/L)² + (u<sub>W</sub>/W)² + (u<sub>H</sub>/H)² )</p>
+                <p class="mb-2 font-medium">密度：ρ = m / V</p>
+                <p>u<sub>ρ</sub> / ρ = sqrt( (u<sub>m</sub>/m)² + (u<sub>V</sub>/V)² )</p>
+            </div>
+            <div class="bg-amber-50 p-4 rounded-lg">
+                <p>✨ 結果需符合有效位數原則，小數位與不確定度尾數一致</p>
+            </div>
+            <button class="btn mt-6 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 w-full" onclick="closeHint(4)">了解</button>
+        </div>
+    </div>
+
+    <div id="hint-modal-5" class="hint-modal fixed inset-0 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <h3 class="text-xl font-bold text-indigo-800 mb-4">📘 統計型不確定度（A 類）+ B 類合併計算</h3>
+            <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                <ol class="list-decimal pl-5 space-y-2">
+                    <li>平均值：x̄ = (Σx) / n</li>
+                    <li>樣本標準差：s = sqrt(Σ(xi - x̄)² / (n - 1))</li>
+                    <li>u<sub>A</sub> = s / sqrt(n)</li>
+                    <li>u<sub>B</sub> = LC / sqrt(12)</li>
+                    <li>u<sub>C</sub> = sqrt(u<sub>A</sub>² + u<sub>B</sub>²)</li>
+                </ol>
+            </div>
+            <div class="bg-amber-50 p-4 rounded-lg">
+                <p>✨ 最終答案應保留 2 位有效數字，並與主測量值尾數一致</p>
+            </div>
+            <button class="btn mt-6 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 w-full" onclick="closeHint(5)">了解</button>
+        </div>
+    </div>
+
+    <script>
+    'use strict';
+
+    // ===== 遊戲狀態 =====
+    const gameState = {
+        completedChallenges: 0,
+        errorCount: 0,
+        challengeStatus: { 1: false, 2: false, 3: false, 4: false, 5: false }
+    };
+
+    // ===== 系列進度（localStorage，與大廳共用）=====
+    const STORE_KEY = 'sssh-physics-series-v1';
+    function loadStore() {
+        try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; }
+    }
+    function saveSeriesProgress(extra) {
+        try {
+            const s = loadStore();
+            const prev = s.temple || {};
+            s.temple = Object.assign({}, prev, {
+                completedChallenges: gameState.completedChallenges,
+                errors: gameState.errorCount,
+                solved: gameState.challengeStatus,
+                completed: prev.completed || gameState.completedChallenges === 5
+            }, extra || {});
+            localStorage.setItem(STORE_KEY, JSON.stringify(s));
+        } catch (e) { /* 私密模式等情況下靜默略過 */ }
+    }
+
+    // 每關的輸入框 id
+    const CHALLENGE_INPUTS = {
+        1: ['challenge1-value', 'challenge1-uncertainty'],
+        2: ['challenge2-length', 'challenge2-length-uncertainty', 'challenge2-width', 'challenge2-width-uncertainty', 'challenge2-height', 'challenge2-height-uncertainty'],
+        3: ['challenge3-value', 'challenge3-uncertainty'],
+        4: ['challenge4-volume', 'challenge4-volume-uncertainty', 'challenge4-density', 'challenge4-density-uncertainty'],
+        5: ['challenge5-value', 'challenge5-uncertainty']
+    };
+
+    // 輸入正規化：去空白、全形數字/小數點/負號轉半形
+    function val(id) {
+        const raw = document.getElementById(id).value.trim();
+        return raw.replace(/[０-９．－]/g, ch => {
+            if (ch === '．') return '.';
+            if (ch === '－') return '-';
+            return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+        });
+    }
+
+    function lockChallenge(n) {
+        CHALLENGE_INPUTS[n].forEach(id => { document.getElementById(id).disabled = true; });
+        document.getElementById('challenge' + n + '-submit').disabled = true;
+    }
+
+    // ===== 答案判定（與原版完全相同的密碼）=====
+    function checkChallenge(challengeNumber) {
+        if (gameState.challengeStatus[challengeNumber]) return; // 已解鎖的關卡不重複計分
+
+        let isCorrect = false;
+        let feedbackMessage = '';
+
+        switch (challengeNumber) {
+            case 1: {
+                const value1 = val('challenge1-value');
+                const uncertainty1 = val('challenge1-uncertainty');
+                if (value1 === '63.00' && uncertainty1 === '0.29') {
+                    isCorrect = true;
+                    feedbackMessage = '✅ 正確！你成功解開了第一道密碼！';
+                }
+                break;
+            }
+            case 2: {
+                const length = val('challenge2-length');
+                const lengthU = val('challenge2-length-uncertainty');
+                const width = val('challenge2-width');
+                const widthU = val('challenge2-width-uncertainty');
+                const height = val('challenge2-height');
+                const heightU = val('challenge2-height-uncertainty');
+                if (length === '8.500' && lengthU === '0.029' &&
+                    ((width === '4.190' || width === '4.200') && widthU === '0.029') &&
+                    height === '2.000' && heightU === '0.029') {
+                    isCorrect = true;
+                    feedbackMessage = '✅ 正確！你成功解開了第二道密碼！';
+                }
+                break;
+            }
+            case 3: {
+                const value3 = val('challenge3-value');
+                const uncertainty3 = val('challenge3-uncertainty');
+                if ((value3 === '25.380' && uncertainty3 === '0.082') ||
+                    (value3 === '25.400' && uncertainty3 === '0.082')) {
+                    isCorrect = true;
+                    feedbackMessage = '✅ 正確！你成功解開了第三道密碼！';
+                }
+                break;
+            }
+            case 4: {
+                const volume = val('challenge4-volume');
+                const volumeU = val('challenge4-volume-uncertainty');
+                const density = val('challenge4-density');
+                const densityU = val('challenge4-density-uncertainty');
+                if ((volume === '71.2' && volumeU === '1.2' && density === '0.885' && densityU === '0.016') ||
+                    (volume === '71.4' && volumeU === '1.2' && density === '0.882' && densityU === '0.016')) {
+                    isCorrect = true;
+                    feedbackMessage = '✅ 正確！你成功解開了第四道密碼！';
+                }
+                break;
+            }
+            case 5: {
+                const value5 = val('challenge5-value');
+                const uncertainty5 = val('challenge5-uncertainty');
+                if (value5 === '25.63' && uncertainty5 === '0.090') {
+                    isCorrect = true;
+                    feedbackMessage = '✅ 正確！你成功解開了最後一道密碼！';
+                }
+                break;
+            }
+        }
+
+        if (!isCorrect) {
+            feedbackMessage = '❌ 密碼錯誤，請再試一次。';
+            gameState.errorCount++;
+        }
+
+        const feedbackElement = document.getElementById('challenge' + challengeNumber + '-feedback');
+        feedbackElement.innerHTML = feedbackMessage;
+        feedbackElement.className = isCorrect ? 'mt-4 text-green-600 font-medium' : 'mt-4 text-red-600 font-medium';
+        feedbackElement.classList.remove('hidden');
+
+        if (isCorrect) {
+            gameState.challengeStatus[challengeNumber] = true;
+            gameState.completedChallenges++;
+            document.getElementById('challenge-' + challengeNumber).classList.add('completed');
+            lockChallenge(challengeNumber);
+            if (gameState.completedChallenges === 5) {
+                setTimeout(showFinalResult, 1500);
+            }
+        }
+
+        document.getElementById('error-count').textContent = gameState.errorCount;
+        document.getElementById('completed-challenges').textContent = gameState.completedChallenges;
+        updateTitle();
+        saveSeriesProgress();
+    }
+
+    function showHint(n) { document.getElementById('hint-modal-' + n).classList.remove('hidden'); }
+    function closeHint(n) { document.getElementById('hint-modal-' + n).classList.add('hidden'); }
+
+    function titleFor(errors) {
+        if (errors === 0) return { text: '📏 精準勇者', cls: 'bg-green-100 text-green-800' };
+        if (errors <= 2) return { text: '📐 謹慎探險家', cls: 'bg-blue-100 text-blue-800' };
+        if (errors <= 4) return { text: '🧮 數感學徒', cls: 'bg-yellow-100 text-yellow-800' };
+        return { text: '🪨 亂量神民', cls: 'bg-red-100 text-red-800' };
+    }
+
+    function updateTitle() {
+        const t = titleFor(gameState.errorCount);
+        const titleElement = document.getElementById('current-title');
+        titleElement.textContent = t.text;
+        titleElement.className = 'title-badge ' + t.cls;
+    }
+
+    function showFinalResult() {
+        document.getElementById('challenges-container').classList.add('hidden');
+        document.getElementById('final-error-count').textContent = gameState.errorCount;
+        const t = titleFor(gameState.errorCount);
+        document.getElementById('final-title').textContent = t.text;
+
+        // 歷史最佳紀錄（跨場次）
+        const prevBest = (loadStore().temple || {}).bestErrors;
+        const isNewBest = !(Number.isFinite(prevBest)) || gameState.errorCount < prevBest;
+        const best = isNewBest ? gameState.errorCount : prevBest;
+        saveSeriesProgress({ completed: true, bestErrors: best, bestTitle: titleFor(best).text });
+
+        const bestEl = document.getElementById('best-record');
+        if (Number.isFinite(prevBest)) {
+            bestEl.textContent = isNewBest
+                ? '🎊 刷新歷史最佳紀錄！（先前最佳：錯誤 ' + prevBest + ' 次）'
+                : '歷史最佳紀錄：錯誤 ' + best + ' 次（' + titleFor(best).text + '）';
+            bestEl.classList.remove('hidden');
+        }
+
+        document.getElementById('final-result').classList.remove('hidden');
+    }
+
+    function resetGame() {
+        gameState.completedChallenges = 0;
+        gameState.errorCount = 0;
+        gameState.challengeStatus = { 1: false, 2: false, 3: false, 4: false, 5: false };
+
+        document.querySelectorAll('input').forEach(input => { input.value = ''; input.disabled = false; });
+        document.querySelectorAll('[id$="-feedback"]').forEach(fb => fb.classList.add('hidden'));
+        for (let i = 1; i <= 5; i++) {
+            document.getElementById('challenge-' + i).classList.remove('completed');
+            document.getElementById('challenge' + i + '-submit').disabled = false;
+        }
+        document.getElementById('final-result').classList.add('hidden');
+        document.getElementById('challenges-container').classList.remove('hidden');
+        document.getElementById('error-count').textContent = '0';
+        document.getElementById('completed-challenges').textContent = '0';
+        updateTitle();
+        saveSeriesProgress(); // 保留 bestErrors / bestTitle，重置本場進度
+    }
+
+    // ===== 初始化：還原上次進行中的挑戰 =====
+    (function initGame() {
+        const saved = loadStore().temple;
+        if (saved && saved.solved) {
+            for (let i = 1; i <= 5; i++) {
+                if (saved.solved[i]) {
+                    gameState.challengeStatus[i] = true;
+                    gameState.completedChallenges++;
+                    document.getElementById('challenge-' + i).classList.add('completed');
+                    lockChallenge(i);
+                }
+            }
+            gameState.errorCount = saved.errors || 0;
+            document.getElementById('error-count').textContent = gameState.errorCount;
+            document.getElementById('completed-challenges').textContent = gameState.completedChallenges;
+        }
+        updateTitle();
+    })();
+    </script>
+</body>
+</html>
