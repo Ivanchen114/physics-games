@@ -1,6 +1,6 @@
 {
-  "name": "law-temple-v4",
-  "version": "4.1.0",
+  "name": "law-temple-v5",
+  "version": "5.0.0",
   "private": true,
   "scripts": {
     "test": "node tests/models.cjs && node tests/site-integrity.cjs && node tests/learning-contracts.cjs",

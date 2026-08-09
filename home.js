@@ -23,8 +23,9 @@ function readProfile() {
 }
 
 function playerRank(xp) {
-  if (xp >= 8000) return "天穹法則師";
-  if (xp >= 4500) return "十二殿巡禮者";
+  if (xp >= 14000) return "微界法則師";
+  if (xp >= 8000) return "十七殿巡禮者";
+  if (xp >= 4500) return "天穹法則師";
   if (xp >= 2200) return "證據鍛造者";
   if (xp >= 900) return "雙印解讀者";
   if (xp >= 300) return "神火行者";
@@ -63,8 +64,8 @@ document.querySelector("[data-world-story]").innerHTML = `
 
 const mission = nextMission();
 const totalCompleted = foundationCompleted.size + advancedCompleted.size;
-const campaignHref = mission ? `temple.html?temple=${mission.temple.id}&track=${mission.track}&level=${mission.level.code}` : "temple.html?temple=celestial&track=advanced";
-const campaignTitle = mission ? `${mission.temple.name}・${mission.level.title}` : "十二刻印已全數共鳴";
+const campaignHref = mission ? `temple.html?temple=${mission.temple.id}&track=${mission.track}&level=${mission.level.code}` : "temple.html?temple=nuclear&track=advanced";
+const campaignTitle = mission ? `${mission.temple.name}・${mission.level.title}` : "十七刻印已全數共鳴";
 const campaignCopy = mission
   ? `${mission.track === "foundation" ? "初階殿" : "進階殿"}推薦任務；這只是遠征指引，你仍可自由選擇任何神殿。`
   : "你已完成失序紀元的全部試煉，仍可返回任一機關重建證據。";
@@ -94,7 +95,7 @@ document.querySelector("[data-campaign]").innerHTML = `
     <li><span>02</span><div><strong>操作取證</strong><small>改變變因，讓圖像與數值留下證據。</small></div></li>
     <li><span>03</span><div><strong>解釋修正</strong><small>用證據選模型；答錯也能回溯再試。</small></div></li>
   </ol>
-  <div class="act-map" aria-label="四幕遠征地圖">${actCards}</div>`;
+  <div class="act-map" aria-label="法則遠征地圖">${actCards}</div>`;
 
 document.querySelector("[data-temple-grid]").innerHTML = data.temples.map(temple => {
   const foundation = completedInTemple(temple, "foundation");

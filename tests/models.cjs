@@ -2,10 +2,10 @@ const assert = require("node:assert/strict");
 const data = require("../data.js");
 const physics = require("../physics.js");
 
-assert.equal(data.temples.length, 12);
-assert.deepEqual(data.totals, { foundation: 48, advanced: 49 });
-assert.equal(data.version, "4.1.0");
-assert.match(data.world.premise, /十二座神殿/);
+assert.equal(data.temples.length, 17);
+assert.deepEqual(data.totals, { foundation: 68, advanced: 69 });
+assert.equal(data.version, "5.0.0");
+assert.match(data.world.premise, /十七座神殿/);
 
 assert.ok(Math.abs(physics.tricepsWeight(300, 5, 30, 150) - 100) < 1e-9);
 assert.ok(Math.abs(physics.deadliftWeight(2250, 8, 300, 40, 60) - 100) < 1e-9);
@@ -29,5 +29,15 @@ const electricity = data.temples.find(t => t.id === "electric").tracks.advanced[
 assert.deepEqual(electricity.inputs.map(field => field.answer), [2, 6]);
 const orbit = data.temples.find(t => t.id === "celestial").tracks.advanced[3];
 assert.equal(orbit.inputs[0].answer, 8);
+const projectile = data.temples.find(t => t.id === "newton").tracks.advanced[3];
+assert.deepEqual(projectile.inputs.map(field => field.answer), [3, 60]);
+const closedTube = data.temples.find(t => t.id === "resonance").tracks.advanced[2];
+assert.equal(closedTube.inputs[0].answer, 200);
+const transformer = data.temples.find(t => t.id === "emwave").tracks.advanced[1];
+assert.equal(transformer.inputs[0].answer, 24);
+const hydrogen = data.temples.find(t => t.id === "quantum").tracks.advanced[3];
+assert.deepEqual(hydrogen.inputs.map(field => field.answer), [1.89, 656]);
+const halfLife = data.temples.find(t => t.id === "nuclear").tracks.advanced[0];
+assert.equal(halfLife.inputs[0].answer, 100);
 
-console.log("V4 physics models: 12 temples and representative reference values OK");
+console.log("V5 physics models: 17 temples and representative reference values OK");

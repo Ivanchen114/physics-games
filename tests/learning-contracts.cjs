@@ -18,7 +18,7 @@ for (const temple of data.temples) {
     assert.ok(level.inputs.every(field => Number.isFinite(field.answer)), `${level.code} missing reference answer`);
   }
 }
-assert.equal(new Set(codes).size, 97);
+assert.equal(new Set(codes).size, 137);
 
 const water = data.temples.find(t => t.id === "ripple");
 assert.match(water.tracks.foundation[0].explanation, /頻率增加，波長縮短/);
@@ -30,4 +30,13 @@ for (const temple of data.temples) {
   for (const field of ["act", "region", "guardian", "relic", "crisis", "oath"]) assert.ok(temple[field], `${temple.id} missing ${field}`);
 }
 
-console.log("V4 learning contracts: 48 qualitative and 49 model-calculation levels separated OK");
+const measurement = data.temples.find(t => t.id === "uncertainty");
+assert.equal(measurement.name, "無刻神殿");
+assert.match(measurement.short, /量測不確定度/);
+const quantum = data.temples.find(t => t.id === "quantum");
+assert.match(quantum.tracks.foundation.map(level => level.skill).join(" "), /電子的發現.*電荷量子化.*量子論的發現.*原子模型/);
+assert.match(quantum.tracks.advanced.map(level => level.skill).join(" "), /eV=hc\/λmin.*E=hf.*λ=h\/p.*ΔE/);
+const nuclear = data.temples.find(t => t.id === "nuclear");
+assert.match(nuclear.tracks.foundation.map(level => level.skill).join(" "), /強作用.*衰變.*半衰期.*基本交互作用/);
+
+console.log("V5 learning contracts: 68 qualitative and 69 model-calculation levels separated OK");

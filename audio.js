@@ -7,7 +7,8 @@
     photo: [138.59, 174.61, 207.65], ripple: [110, 146.83, 220], uncertainty: [116.54, 155.56, 233.08],
     momentum: [98, 130.81, 196], energy: [110, 138.59, 220], electric: [123.47, 164.81, 246.94],
     magnetic: [103.83, 155.56, 207.65], optics: [130.81, 164.81, 261.63], thermal: [92.5, 138.59, 185],
-    celestial: [82.41, 123.47, 164.81]
+    celestial: [82.41, 123.47, 164.81], newton: [98, 146.83, 220], resonance: [110, 164.81, 246.94],
+    emwave: [92.5, 138.59, 277.18], quantum: [103.83, 155.56, 233.08], nuclear: [77.78, 116.54, 174.61]
   };
   let enabled = false;
   try { enabled = localStorage.getItem(STORAGE_KEY) === "true"; } catch { enabled = false; }

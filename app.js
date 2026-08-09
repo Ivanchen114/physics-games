@@ -52,8 +52,9 @@ function saveProfile() {
 }
 
 function playerRank(xp = profile.xp) {
-  if (xp >= 8000) return "天穹法則師";
-  if (xp >= 4500) return "十二殿巡禮者";
+  if (xp >= 14000) return "微界法則師";
+  if (xp >= 8000) return "十七殿巡禮者";
+  if (xp >= 4500) return "天穹法則師";
   if (xp >= 2200) return "證據鍛造者";
   if (xp >= 900) return "雙印解讀者";
   if (xp >= 300) return "神火行者";
@@ -440,7 +441,7 @@ function drawVisual(level, state) {
   else if (type.startsWith("photo-")) drawPhotoVisual(ctx, type, value, revealed, w, h);
   else if (type.startsWith("measure-") || type.startsWith("uncertainty-")) drawMeasureVisual(ctx, type, value, revealed, w, h);
   else if (type.startsWith("xt-") || type.startsWith("chase") || type.startsWith("brake") || type.startsWith("chrono-")) drawChronoVisual(ctx, type, value, revealed, w, h);
-  else if (["momentum-","energy-","electric-","magnetic-","optics-","thermal-","celestial-"].some(prefix => type.startsWith(prefix))) drawExpansionVisual(ctx, type, value, revealed, w, h);
+  else if (["momentum-","energy-","electric-","magnetic-","optics-","thermal-","celestial-","newton-","resonance-","emwave-","quantum-","nuclear-"].some(prefix => type.startsWith(prefix))) drawExpansionVisual(ctx, type, value, revealed, w, h);
   else drawTitanVisual(ctx, type, value, revealed, w, h);
   ctx.restore();
 }
@@ -572,7 +573,12 @@ function drawExpansionVisual(ctx, type, value, revealed, w, h) {
   else if (family === "magnetic") drawMagneticEvidence(ctx, type, value, revealed);
   else if (family === "optics") drawOpticsEvidence(ctx, type, value, revealed);
   else if (family === "thermal") drawThermalEvidence(ctx, type, value, revealed);
-  else drawCelestialEvidence(ctx, type, value, revealed);
+  else if (family === "celestial") drawCelestialEvidence(ctx, type, value, revealed);
+  else if (family === "newton") drawNewtonEvidence(ctx, type, value, revealed);
+  else if (family === "resonance") drawResonanceEvidence(ctx, type, value, revealed);
+  else if (family === "emwave") drawEMWaveEvidence(ctx, type, value, revealed);
+  else if (family === "quantum") drawQuantumEvidence(ctx, type, value, revealed);
+  else drawNuclearEvidence(ctx, type, value, revealed);
 }
 
 function evidenceCaption(ctx, text, color = "#a1fff5") {
@@ -665,6 +671,130 @@ function drawCelestialEvidence(ctx, type, value, revealed) {
   const sx=cx+radius,sy=cy;dot(ctx,sx,sy,"#91a8ff",20);
   arrow(ctx,sx,sy,sx,sy-120,"#65ded2","v");arrow(ctx,sx-8,sy,cx+75,cy,"#ff806b","a / Fg");
   if (revealed) evidenceCaption(ctx,type.includes("gravity")?"F ∝ 1/r²｜距離 2 倍，引力 1/4":type.includes("kepler")?"T² ∝ r³｜半徑 4 倍，週期 8 倍":"引力提供向心力｜軌道模型已驗證");
+}
+
+function drawNewtonEvidence(ctx, type, value, revealed) {
+  if (type.includes("incline")) {
+    ctx.strokeStyle="#dce6f2";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(170,410);ctx.lineTo(760,185);ctx.stroke();
+    ctx.save();ctx.translate(500,285);ctx.rotate(-.36);ctx.fillStyle="#73c8ff";ctx.fillRect(-55,-40,110,80);ctx.restore();
+    arrow(ctx,500,285,500,445,"#ff806b","mg");arrow(ctx,500,285,650,225,"#65ded2","mg sinθ");
+    if(revealed) evidenceCaption(ctx,type.includes("calc")?"沿斜面：a = g sin30° = 4.9 m/s²":"沿斜面分量改變速度；正向力垂直斜面");
+    return;
+  }
+  if (type.includes("projectile")) {
+    ctx.strokeStyle="#dce6f2";ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(165,190);ctx.lineTo(165,430);ctx.lineTo(820,430);ctx.stroke();
+    ctx.strokeStyle="#73c8ff";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(210,210);ctx.quadraticCurveTo(480,220,760,420);ctx.stroke();
+    arrow(ctx,215,210,385,210,"#65ded2","vx");arrow(ctx,565,320,565,430,"#ff806b","vy");
+    if(revealed) evidenceCaption(ctx,type.includes("calc")?"t = 3 s｜水平距離 60 m":"水平等速・鉛直等加速｜共享同一時間");
+    return;
+  }
+  drawCart(ctx,360,305,"#73c8ff",190);
+  if(type.includes("inertia")) {
+    arrow(ctx,360,250,690,250,"#ffd36d","速度 v");
+  } else {
+    arrow(ctx,550,332,760,332,"#65ded2","向右力");
+    arrow(ctx,360,385,210,385,"#ff806b",type.includes("friction")?"摩擦":"反向力");
+  }
+  if(revealed) evidenceCaption(ctx,type.includes("inertia")?"ΣF = 0｜速度向量保持不變":type.includes("friction")&&type.includes("calc")?"fk = μkmg｜a = 3.04 m/s²":type.includes("friction")?"未滑動：靜摩擦配合推力；滑動後 fk=μkN":type.includes("calc")?"ΣF = ma｜合力 20 N，加速度 4.0 m/s²":"加速度方向與合力相同");
+}
+
+function drawResonanceEvidence(ctx, type, value, revealed) {
+  const x0=165,x1=835,mid=300;
+  ctx.strokeStyle="rgba(220,230,242,.5)";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x0,mid);ctx.lineTo(x1,mid);ctx.stroke();
+  if(type.includes("tube")) {
+    ctx.strokeStyle="#dce6f2";ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(260,180);ctx.lineTo(260,400);ctx.lineTo(760,400);ctx.stroke();
+    ctx.strokeStyle="#58e0d3";ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(260,300);ctx.bezierCurveTo(410,300,590,150,760,150);ctx.stroke();
+    label(ctx,"節",240,440,"#ffdc8b",18);label(ctx,"腹",745,135,"#a1fff5",18);
+    if(revealed) evidenceCaption(ctx,type.includes("calc")?"閉管基音：f₁ = v/(4L) = 200 Hz":"閉端為位移節點・開端為位移腹點");
+    return;
+  }
+  const harmonics=type.includes("harmonic")?3:1;
+  ctx.strokeStyle="#58e0d3";ctx.lineWidth=8;ctx.beginPath();
+  for(let i=0;i<=240;i++){const t=i/240;const x=x0+(x1-x0)*t;const y=mid-120*Math.sin(harmonics*Math.PI*t);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}ctx.stroke();
+  for(let n=0;n<=harmonics;n++) dot(ctx,x0+(x1-x0)*n/harmonics,mid,"#ffdc8b",9);
+  if(type.includes("match")&&revealed){ctx.strokeStyle="rgba(181,140,255,.7)";ctx.lineWidth=4;ctx.beginPath();ctx.arc(500,300,165,0,Math.PI*2);ctx.stroke();}
+  if(revealed) evidenceCaption(ctx,type.includes("pitch")?"頻率決定音高・振幅主要影響響度":type.includes("match")?"驅動頻率 ≈ 固有頻率｜振幅達峰值":type.includes("harmonic")?"第三諧波：f₃ = 3f₁ = 600 Hz":type.includes("string")?"兩端固定基音：f₁ = v/(2L) = 200 Hz":type.includes("calc")?"v = fλ｜波長 0.80 m":"節點不動・腹點振幅最大");
+}
+
+function drawEMWaveEvidence(ctx, type, value, revealed) {
+  if(type.includes("transformer")||type.includes("voltage")||type.includes("current")) {
+    ctx.fillStyle="#695f58";ctx.fillRect(430,170,140,250);
+    ctx.strokeStyle="#8e8bff";ctx.lineWidth=8;
+    for(let i=0;i<6;i++){ctx.beginPath();ctx.arc(380,210+i*32,45,-Math.PI/2,Math.PI/2);ctx.stroke();}
+    ctx.strokeStyle="#58e0d3";
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(620,250+i*55,45,Math.PI/2,Math.PI*1.5);ctx.stroke();}
+    label(ctx,"初級",300,455,"#dce6f2",18);label(ctx,"次級",630,455,"#dce6f2",18);
+    if(revealed) evidenceCaption(ctx,type.includes("current")?"理想功率守恆：120 V×1 A = 24 V×5 A":"電壓比 = 匝數比｜1000:200 → 120:24");
+    return;
+  }
+  if(type.includes("generator")||type.includes("faraday")) {
+    ctx.strokeStyle="#dce6f2";ctx.lineWidth=10;ctx.strokeRect(350,190,300,220);
+    ctx.strokeStyle="#8e8bff";ctx.lineWidth=5;for(let x=190;x<=810;x+=70)arrow(ctx,x,405,x,185,"#8e8bff","");
+    arrow(ctx,500,300,690,250,"#58e0d3","旋轉");
+    if(revealed)evidenceCaption(ctx,type.includes("calc")?"|ε| = N|ΔΦ|/Δt = 30 V":"磁通量改變越快，感應電動勢越大");
+    return;
+  }
+  const start=150,end=850,cy=300;
+  ctx.strokeStyle="#8e8bff";ctx.lineWidth=7;ctx.beginPath();for(let i=0;i<=180;i++){const t=i/180,x=start+(end-start)*t,y=cy-100*Math.sin(t*Math.PI*4);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();
+  ctx.strokeStyle="#58e0d3";ctx.lineWidth=5;ctx.beginPath();for(let i=0;i<=180;i++){const t=i/180,x=start+(end-start)*t,y=cy-75*Math.cos(t*Math.PI*4);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();
+  arrow(ctx,250,440,760,440,"#ffdc8b","傳播方向");
+  if(revealed)evidenceCaption(ctx,type.includes("polarization")?"偏振片選擇電場振動方向":type.includes("wavelength")?"λ = c/f = 3.0 m":"交流週期反向｜電場、磁場與傳播方向互相垂直");
+}
+
+function drawQuantumEvidence(ctx, type, value, revealed) {
+  if(type.includes("electron")) {
+    ctx.strokeStyle="#dce6f2";ctx.lineWidth=8;ctx.strokeRect(180,185,640,235);
+    ctx.fillStyle="#8e8bff";ctx.fillRect(215,220,22,165);ctx.fillStyle="#ff806b";ctx.fillRect(763,220,22,165);
+    label(ctx,"陰極 −",190,165,"#d8c8ff",18);label(ctx,"陽極 +",735,165,"#ffb6ac",18);
+    ctx.strokeStyle="#73c8ff";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(240,305);ctx.quadraticCurveTo(500,revealed?205:305,755,305);ctx.stroke();
+    arrow(ctx,470,305,650,revealed?250:305,"#73c8ff","電子束");
+    if(revealed)evidenceCaption(ctx,"外加場 ↑｜帶負電的電子束偏轉更明顯");
+    return;
+  }
+  if(type.includes("charge")) {
+    ctx.strokeStyle="#dce6f2";ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(210,165);ctx.lineTo(790,165);ctx.moveTo(210,420);ctx.lineTo(790,420);ctx.stroke();
+    label(ctx,"＋極板",215,145,"#ffb6ac",18);label(ctx,"−極板",215,455,"#d8c8ff",18);
+    const charges=[1,2,3,4];
+    charges.forEach((n,i)=>{const x=300+i*135,y=230+(i%2)*90;dot(ctx,x,y,"#ffdc8b",18);label(ctx,`${n}e`,x-16,y+45,"#dce6f2",17);});
+    if(revealed)evidenceCaption(ctx,"所有油滴電量皆為 e 的整數倍：q = ne");
+    return;
+  }
+  if(type.includes("matter")) {
+    arrow(ctx,180,300,810,300,"#73c8ff","粒子動量 p");
+    ctx.strokeStyle="#b58cff";ctx.lineWidth=7;ctx.beginPath();
+    for(let i=0;i<=180;i++){const t=i/180,x=180+630*t,y=300-82*Math.sin(t*Math.PI*8);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();
+    if(revealed)evidenceCaption(ctx,"德布羅意物質波：λ = h/p = 0.100 nm");
+    return;
+  }
+  if(type.includes("xray")) {
+    graphAxes(ctx,190,425,620,245,"λ","X 光強度");
+    ctx.strokeStyle="#b58cff";ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(300,425);ctx.lineTo(300,365);ctx.bezierCurveTo(385,180,600,245,790,360);ctx.stroke();
+    ctx.setLineDash([10,8]);ctx.strokeStyle="#ffdc8b";ctx.beginPath();ctx.moveTo(300,425);ctx.lineTo(300,170);ctx.stroke();ctx.setLineDash([]);label(ctx,"λmin",270,455,"#ffdc8b",18);
+    if(revealed)evidenceCaption(ctx,"12.4 keV 電子束 → 最短波長 0.100 nm");
+    return;
+  }
+  const levels=[410,335,260,185];
+  ctx.strokeStyle="rgba(181,140,255,.78)";ctx.lineWidth=6;levels.forEach((y,i)=>{ctx.beginPath();ctx.moveTo(235,y);ctx.lineTo(765,y);ctx.stroke();label(ctx,`n=${i+1}`,780,y+6,"#d8c8ff",16);});
+  if(type.includes("atom")) {
+    dot(ctx,500,300,"#ff7396",30);for(let i=0;i<70;i++){const a=i*2.4,r=45+(i%9)*13;dot(ctx,500+Math.cos(a)*r,300+Math.sin(a)*r*.62,"rgba(181,140,255,.32)",5);}
+  } else {
+    dot(ctx,500,levels[2],"#73c8ff",13);arrow(ctx,500,levels[2],500,levels[0],"#ffdc8b","ΔE");
+  }
+  if(revealed)evidenceCaption(ctx,type.includes("spectrum")?"n=3 → 2｜1.89 eV｜656 nm":type.includes("atom")?"現代原子：離散能階 + 機率分布":"能量以 hf 的離散份額交換");
+}
+
+function drawNuclearEvidence(ctx, type, value, revealed) {
+  const cx=500,cy=290;
+  for(let i=0;i<18;i++){const a=i*2.4,r=18+(i%4)*22;dot(ctx,cx+Math.cos(a)*r,cy+Math.sin(a)*r,i%2?"#ff7396":"#73c8ff",15);}
+  if(type.includes("radiation")||type.includes("alpha")||type.includes("beta")) {
+    arrow(ctx,585,260,800,190,"#ff7396","α");arrow(ctx,585,300,810,300,"#73c8ff","β");arrow(ctx,580,335,790,410,"#ffdc8b","γ");
+  } else if(type.includes("half")) {
+    ctx.strokeStyle="#b58cff";ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(620,165);ctx.bezierCurveTo(690,170,700,400,830,410);ctx.stroke();
+    label(ctx,"800 → 400 → 200 → 100",570,475,"#d8c8ff",20);
+  } else {
+    for(let r=120;r<=210;r+=45){ctx.strokeStyle=`rgba(181,140,255,${.75-r/400})`;ctx.lineWidth=4;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();}
+  }
+  if(revealed)evidenceCaption(ctx,type.includes("half")?"三個半衰期：800×(1/2)³ = 100":type.includes("mass")?"E = Δmc² = 1.86 MeV":type.includes("alpha")?"α：A−4、Z−2｜子核為 A=234、Z=90":type.includes("beta")?"β⁻：A 不變、Z+1｜弱作用":"強作用束縛核子・弱作用參與 β 衰變");
 }
 
 window.addEventListener("popstate", render);
