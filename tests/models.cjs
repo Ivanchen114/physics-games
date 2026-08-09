@@ -2,8 +2,10 @@ const assert = require("node:assert/strict");
 const data = require("../data.js");
 const physics = require("../physics.js");
 
-assert.equal(data.temples.length, 5);
-assert.deepEqual(data.totals, { foundation: 20, advanced: 21 });
+assert.equal(data.temples.length, 12);
+assert.deepEqual(data.totals, { foundation: 48, advanced: 49 });
+assert.equal(data.version, "4.0.0");
+assert.match(data.world.premise, /十二座神殿/);
 
 assert.ok(Math.abs(physics.tricepsWeight(300, 5, 30, 150) - 100) < 1e-9);
 assert.ok(Math.abs(physics.deadliftWeight(2250, 8, 300, 40, 60) - 100) < 1e-9);
@@ -21,5 +23,11 @@ assert.equal(triceps.inputs[0].answer, 100);
 assert.match(triceps.known.join(" "), /150°/);
 const waterCount = data.temples.find(t => t.id === "ripple").tracks.advanced[2];
 assert.deepEqual(waterCount.inputs.map(field => field.answer), [7, 6]);
+const momentumLoss = data.temples.find(t => t.id === "momentum").tracks.advanced[3];
+assert.equal(momentumLoss.inputs[0].answer, 12);
+const electricity = data.temples.find(t => t.id === "electric").tracks.advanced[3];
+assert.deepEqual(electricity.inputs.map(field => field.answer), [2, 6]);
+const orbit = data.temples.find(t => t.id === "celestial").tracks.advanced[3];
+assert.equal(orbit.inputs[0].answer, 8);
 
-console.log("V3 physics models: torque, motion, waves and uncertainty reference values OK");
+console.log("V4 physics models: 12 temples and representative reference values OK");

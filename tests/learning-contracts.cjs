@@ -18,7 +18,7 @@ for (const temple of data.temples) {
     assert.ok(level.inputs.every(field => Number.isFinite(field.answer)), `${level.code} missing reference answer`);
   }
 }
-assert.equal(new Set(codes).size, 41);
+assert.equal(new Set(codes).size, 97);
 
 const water = data.temples.find(t => t.id === "ripple");
 assert.match(water.tracks.foundation[0].explanation, /頻率增加，波長縮短/);
@@ -26,4 +26,8 @@ assert.match(water.tracks.foundation[1].explanation, /只改振幅不會改變/)
 assert.match(water.tracks.foundation[3].explanation, /干涉線數通常增加/);
 assert.match(water.tracks.advanced[2].known.join(" "), /完整平面/);
 
-console.log("V3 learning contracts: 20 qualitative and 21 model-calculation levels separated OK");
+for (const temple of data.temples) {
+  for (const field of ["act", "region", "guardian", "relic", "crisis", "oath"]) assert.ok(temple[field], `${temple.id} missing ${field}`);
+}
+
+console.log("V4 learning contracts: 48 qualitative and 49 model-calculation levels separated OK");

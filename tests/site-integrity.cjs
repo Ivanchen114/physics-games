@@ -17,11 +17,14 @@ for (const filename of htmlFiles) {
   }
 }
 
+const artAssets = new Set();
 for (const temple of data.temples) {
+  artAssets.add(temple.heroImage);
   assert.ok(fs.existsSync(path.join(root, temple.heroImage)), `${temple.heroImage} missing`);
   for (const track of ["foundation", "advanced"]) {
     for (const level of temple.tracks[track]) {
       const image = path.join(root, level.image);
+      artAssets.add(level.image);
       assert.ok(fs.existsSync(image), `${level.code}: ${level.image} missing`);
       assert.ok(fs.statSync(image).size > 100_000, `${level.code}: image too small`);
     }
@@ -35,5 +38,9 @@ assert.match(app, /drawTitanVisual/);
 assert.match(app, /drawChronoVisual/);
 assert.match(app, /drawPhotoVisual/);
 assert.match(app, /drawMeasureVisual/);
+assert.match(app, /drawExpansionVisual/);
+assert.match(app, /law-temple-v4-player/);
+assert.match(app, /神火耗盡/);
+assert.equal(artAssets.size, 28);
 
-console.log("V3 site integrity: routes, 21 art assets, split progress and evidence invalidation OK");
+console.log("V4 site integrity: routes, 28 art assets, flame recovery and evidence invalidation OK");

@@ -7,8 +7,13 @@ const track = params.get("track") === "advanced" ? "advanced" : "foundation";
 const route = data.tracks[track];
 const levels = temple.tracks[track];
 const completed = readProgress(track);
+const profile = readProfile();
 let attempts = 0;
 let hintOpen = false;
+let flame = 3;
+let mistakes = 0;
+let usedHint = false;
+let rewinds = 0;
 
 document.body.dataset.track = track;
 document.documentElement.style.setProperty("--temple-color", temple.color);
@@ -24,6 +29,34 @@ function readProgress(name) {
 
 function saveProgress() {
   localStorage.setItem(`law-temple-v3-${track}-completed`, JSON.stringify([...completed]));
+}
+
+function readProfile() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("law-temple-v4-player") || "{}");
+    return {
+      xp: Number(parsed.xp) || 0,
+      streak: Number(parsed.streak) || 0,
+      bestStreak: Number(parsed.bestStreak) || 0,
+      relics: Array.isArray(parsed.relics) ? parsed.relics : [],
+      levels: parsed.levels && typeof parsed.levels === "object" ? parsed.levels : {}
+    };
+  } catch {
+    return { xp: 0, streak: 0, bestStreak: 0, relics: [], levels: {} };
+  }
+}
+
+function saveProfile() {
+  localStorage.setItem("law-temple-v4-player", JSON.stringify(profile));
+}
+
+function playerRank(xp = profile.xp) {
+  if (xp >= 8000) return "天穹法則師";
+  if (xp >= 4500) return "十二殿巡禮者";
+  if (xp >= 2200) return "證據鍛造者";
+  if (xp >= 900) return "雙印解讀者";
+  if (xp >= 300) return "神火行者";
+  return "法則見習者";
 }
 
 function levelUnlocked(index) {
@@ -54,13 +87,14 @@ function topbar(center, right, backAction) {
 }
 
 function renderMap() {
-  document.title = `${temple.name}・${route.label}｜法則神殿 v3`;
+  document.title = `${temple.name}・${route.label}｜法則神殿`;
   const finished = levels.filter(level => completed.has(level.code)).length;
   main.innerHTML = `<section class="map-page">
     ${topbar(temple.name, `${finished} / ${levels.length}`, "home")}
     <header class="map-hero" style="--hero-image:url('${temple.heroImage}')">
       <div class="map-hero-content">
         <p class="eyebrow">TEMPLE ${temple.number} · ${temple.eyebrow}</p>
+        <p class="story-act">${temple.act} · ${temple.region}</p>
         <span class="route-badge">${route.grade} · ${route.task}</span>
         <h1>${temple.name}</h1>
         <p class="lead">${temple.description}</p>
@@ -76,6 +110,10 @@ function renderMap() {
         <div class="contract-chip"><span>任務形式</span><strong>${route.task}</strong></div>
         <div class="contract-chip"><span>需要能力</span><strong>${route.ability}</strong></div>
         <div class="contract-chip"><span>單關時間</span><strong>${route.duration}</strong></div>
+      </section>
+      <section class="guardian-panel" aria-label="神殿故事">
+        <div><span>神殿守護者</span><strong>${temple.guardian}</strong><small>等待修復：${temple.relic}</small></div>
+        <p>${temple.crisis}</p><blockquote>「${temple.oath}」</blockquote>
       </section>
       <section class="level-grid" aria-label="${route.label}關卡">
         ${levels.map((level, index) => {
@@ -93,19 +131,24 @@ function renderMap() {
   main.querySelectorAll("[data-level]").forEach(button => button.addEventListener("click", () => setLocation(button.dataset.level)));
 }
 
-function renderStage(level, index) {
-  attempts = 0;
-  hintOpen = false;
+function renderStage(level, index, session) {
+  attempts = session?.attempts || 0;
+  hintOpen = Boolean(session?.hintOpen);
+  flame = session?.flame ?? 3;
+  mistakes = session?.mistakes || 0;
+  usedHint = Boolean(session?.usedHint);
+  rewinds = session?.rewinds || 0;
   document.title = `${level.title}｜${temple.name} ${route.label}`;
   main.innerHTML = `<section class="stage-page">
     ${topbar(`${temple.name} · ${route.label}`, `${index + 1} / ${levels.length}`, "map")}
     <div class="shell stage-layout">
       <aside class="brief-panel">
-        <span class="route-badge">${route.grade} · ${route.task}</span>
+        <div class="stage-badges"><span class="route-badge">${route.grade} · ${route.task}</span><span class="guardian-badge">${temple.guardian}</span></div>
+        <section class="flame-panel" aria-label="神火狀態"><div><span>修復者神火</span><strong data-flame>${flameGlyphs()}</strong></div><small data-flame-note>錯誤會使神火衰減；歸零時守護者會啟動回溯，不會封鎖學習。</small></section>
         <h1>${level.title}</h1><p class="mission">${level.mission}</p>
         <div class="metadata"><div><span>任務類型</span><strong>${level.skill}</strong></div><div><span>需要能力</span><strong>${level.prerequisites}</strong></div><div><span>預估時間</span><strong>${level.time}</strong></div></div>
         <section class="known"><h2>已知條件</h2><ul>${level.known.map(item => `<li>${item}</li>`).join("")}</ul></section>
-        <section class="hint-box"><button type="button" data-hint>查看一層線索</button><p data-hint-text aria-live="polite"></p></section>
+        <section class="hint-box"><button type="button" data-hint>${hintOpen ? "收起線索" : "查看一層線索"}</button><p data-hint-text aria-live="polite">${hintOpen ? level.hint : ""}</p></section>
       </aside>
       <div class="game-panel">
         <figure class="scene-frame"><img src="${level.image}" alt="${level.title}的神殿情境圖"><canvas class="evidence-canvas" width="1000" height="562" data-canvas aria-label="程式繪製的物理證據圖"></canvas><figcaption class="scene-caption">情境圖只提供故事；向量、圖線、刻度與數值由程式繪製。</figcaption></figure>
@@ -116,12 +159,45 @@ function renderStage(level, index) {
   main.querySelector("[data-back]").addEventListener("click", () => setLocation(null));
   main.querySelector("[data-hint]").addEventListener("click", event => {
     hintOpen = !hintOpen;
+    if (hintOpen) usedHint = true;
     main.querySelector("[data-hint-text]").textContent = hintOpen ? level.hint : "";
     event.currentTarget.textContent = hintOpen ? "收起線索" : "查看一層線索";
   });
   if (track === "foundation") bindFoundation(level, index);
   else bindAdvanced(level, index);
   drawVisual(level, { value: level.control?.base, revealed: false });
+}
+
+function flameGlyphs() {
+  return `<span class="flame-on">${"◆".repeat(flame)}</span><span class="flame-off">${"◇".repeat(Math.max(0, 3 - flame))}</span>`;
+}
+
+function updateFlame() {
+  const target = main.querySelector("[data-flame]");
+  if (target) target.innerHTML = flameGlyphs();
+}
+
+function loseFlame(level) {
+  mistakes += 1;
+  flame -= 1;
+  if (flame > 0) {
+    updateFlame();
+    return `<span class="damage-note">神火 −1，剩餘 ${flame} 格。</span>`;
+  }
+  rewinds += 1;
+  flame = 2;
+  usedHint = true;
+  hintOpen = true;
+  const hintText = main.querySelector("[data-hint-text]");
+  const hintButton = main.querySelector("[data-hint]");
+  if (hintText) hintText.textContent = level.hint;
+  if (hintButton) hintButton.textContent = "收起線索";
+  updateFlame();
+  return `<span class="rewind-note">神火耗盡：${temple.guardian} 啟動第 ${rewinds} 次回溯，恢復 2 格神火並揭示一層線索。</span>`;
+}
+
+function stageSession() {
+  return { attempts, hintOpen, flame, mistakes, usedHint, rewinds };
 }
 
 function foundationChallenge(level) {
@@ -226,9 +302,11 @@ function bindFoundation(level, index) {
     markChoice("reason", level.reason.correct);
     if (predictionOK && reasonOK) completeLevel(level, index, feedback);
     else {
+      const damage = loseFlame(level);
       feedback.className = "feedback bad";
-      feedback.innerHTML = `<strong>機關尚未接受這條解釋。</strong><br>${predictionOK ? "預測正確；再比較三個理由與畫面證據。" : "預測和證據不一致；請重新進入本關修正整條因果鏈。"}<br><button type="button" class="secondary-button next-button" data-retry>重新預測</button>`;
-      main.querySelector("[data-retry]").addEventListener("click", () => renderStage(level, index));
+      feedback.innerHTML = `<strong>機關尚未接受這條解釋。</strong><br>${predictionOK ? "預測正確；再比較三個理由與畫面證據。" : "預測和證據不一致；請重新進入本關修正整條因果鏈。"}<br>${damage}<br><button type="button" class="secondary-button next-button" data-retry>重新預測</button>`;
+      const session = stageSession();
+      main.querySelector("[data-retry]").addEventListener("click", () => renderStage(level, index, session));
     }
   });
 }
@@ -267,8 +345,9 @@ function bindAdvanced(level, index) {
     if (modelOK && valuesOK) completeLevel(level, index, feedback);
     else {
       const wrongFields = results.filter(result => !result.ok).map(result => level.inputs.find(field => field.id === result.id).label);
+      const damage = loseFlame(level);
       feedback.className = "feedback bad";
-      feedback.innerHTML = `<strong>模型或數值尚未平衡。</strong><br>${modelOK ? "模型正確；請重算：" + wrongFields.join("、") : "先回到已知條件，確認你選的物理關係。"}`;
+      feedback.innerHTML = `<strong>模型或數值尚未平衡。</strong><br>${modelOK ? "模型正確；請重算：" + wrongFields.join("、") : "先回到已知條件，確認你選的物理關係。"}<br>${damage}`;
     }
   });
 }
@@ -296,10 +375,25 @@ function updateAttempts(label, count) {
 }
 
 function completeLevel(level, index, feedback) {
+  const firstClear = !completed.has(level.code);
   completed.add(level.code);
   saveProgress();
+  let reward = 0;
+  if (firstClear) {
+    reward = 100 + Math.max(0, 60 - mistakes * 20) + (usedHint ? 0 : 20);
+    profile.xp += reward;
+    profile.streak = mistakes === 0 && !usedHint ? profile.streak + 1 : 0;
+    profile.bestStreak = Math.max(profile.bestStreak, profile.streak);
+    profile.levels[level.code] = { mistakes, usedHint, rewinds, reward };
+    const foundationDone = temple.tracks.foundation.every(item => readProgress("foundation").has(item.code));
+    const advancedDone = temple.tracks.advanced.every(item => readProgress("advanced").has(item.code));
+    if (foundationDone && advancedDone && !profile.relics.includes(temple.id)) profile.relics.push(temple.id);
+    saveProfile();
+  }
+  const trackEnding = index + 1 === levels.length ? `<br><strong>${route.label}完成：${track === "foundation" ? "觀測印" : "演算印"}已與 ${temple.relic} 共鳴。</strong>` : "";
+  const rewardText = firstClear ? `<br><span class="reward-note">+${reward} 法則經驗・目前階級：${playerRank()}</span>` : `<br><span class="reward-note">重試完成，不重複計算經驗。</span>`;
   feedback.className = "feedback ok";
-  feedback.innerHTML = `<strong>法則刻印已取得。</strong><br>${level.explanation}<br><button type="button" class="primary-button next-button" data-next>${index + 1 < levels.length ? "前往下一關" : "返回關卡地圖"}</button>`;
+  feedback.innerHTML = `<strong>法則刻印已取得。</strong><br>${level.explanation}${rewardText}${trackEnding}<br><button type="button" class="primary-button next-button" data-next>${index + 1 < levels.length ? "前往下一關" : "返回關卡地圖"}</button>`;
   main.querySelector("[data-next]").addEventListener("click", () => index + 1 < levels.length ? setLocation(levels[index + 1].code) : setLocation(null));
 }
 
@@ -320,6 +414,7 @@ function drawVisual(level, state) {
   else if (type.startsWith("photo-")) drawPhotoVisual(ctx, type, value, revealed, w, h);
   else if (type.startsWith("measure-") || type.startsWith("uncertainty-")) drawMeasureVisual(ctx, type, value, revealed, w, h);
   else if (type.startsWith("xt-") || type.startsWith("chase") || type.startsWith("brake") || type.startsWith("chrono-")) drawChronoVisual(ctx, type, value, revealed, w, h);
+  else if (["momentum-","energy-","electric-","magnetic-","optics-","thermal-","celestial-"].some(prefix => type.startsWith(prefix))) drawExpansionVisual(ctx, type, value, revealed, w, h);
   else drawTitanVisual(ctx, type, value, revealed, w, h);
   ctx.restore();
 }
@@ -439,6 +534,111 @@ function drawMeasureVisual(ctx, type, value, revealed) {
     for(let i=0;i<=10;i++){ctx.beginPath();ctx.moveTo(260+i*46,355);ctx.lineTo(260+i*46,335-(i%5===0?18:0));ctx.stroke();}
     if(revealed) label(ctx,type.includes("density")?"ρ = 2.70 ± 0.045 g/cm³":type.includes("perimeter")?"獨立來源以平方和組合":"解析度與報告位數必須一致",270,415,"#e2d6ff",21);
   }
+}
+
+function drawExpansionVisual(ctx, type, value, revealed, w, h) {
+  ctx.fillStyle = "rgba(7,14,24,.58)";
+  ctx.fillRect(90, 105, w - 180, h - 155);
+  const family = type.split("-")[0];
+  if (family === "momentum") drawMomentumEvidence(ctx, type, value, revealed);
+  else if (family === "energy") drawEnergyEvidence(ctx, type, value, revealed);
+  else if (family === "electric") drawElectricEvidence(ctx, type, value, revealed);
+  else if (family === "magnetic") drawMagneticEvidence(ctx, type, value, revealed);
+  else if (family === "optics") drawOpticsEvidence(ctx, type, value, revealed);
+  else if (family === "thermal") drawThermalEvidence(ctx, type, value, revealed);
+  else drawCelestialEvidence(ctx, type, value, revealed);
+}
+
+function evidenceCaption(ctx, text, color = "#a1fff5") {
+  label(ctx, text, 145, 505, color, 20);
+}
+
+function drawCart(ctx, x, y, color, width = 130) {
+  ctx.fillStyle = color; ctx.fillRect(x, y, width, 58);
+  dot(ctx, x + 28, y + 66, "#202a37", 15); dot(ctx, x + width - 28, y + 66, "#202a37", 15);
+}
+
+function drawMomentumEvidence(ctx, type, value, revealed) {
+  const calc = type.includes("calc");
+  drawCart(ctx, 210, 300, "#ff806b");
+  drawCart(ctx, 650, 300, "#7fa5c9");
+  arrow(ctx, 350, 328, 500, 328, "#ffd36d", calc ? "p₁" : "運動");
+  if (type.includes("recoil")) arrow(ctx, 650, 390, 520, 390, "#65ded2", "反衝");
+  if (type.includes("cushion")) { ctx.fillStyle="#6ce7a8"; ctx.fillRect(560,260,35,130); label(ctx,"緩衝區",535,235,"#bfffe0",18); }
+  if (revealed) {
+    if (type.includes("impulse")) evidenceCaption(ctx, calc ? "J = FΔt = 30 N·s" : "作用時間 ↑　動量改變 ↑");
+    else if (type.includes("loss")) evidenceCaption(ctx,"K前 36 J → K後 24 J｜耗散 12 J");
+    else if (type.includes("stick")) evidenceCaption(ctx,calc?"總動量守恆｜共同速度 4 m/s":"黏合：動量守恆，動能轉換");
+    else evidenceCaption(ctx,"總動量：事件前 = 事件後");
+  }
+}
+
+function drawEnergyEvidence(ctx, type, value, revealed) {
+  ctx.strokeStyle="#f3d69b";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(170,390);ctx.lineTo(600,210);ctx.stroke();
+  ctx.fillStyle="#ffbf5c";ctx.fillRect(330,290,95,78);
+  arrow(ctx,375,290,520,230,"#65ded2","施力");
+  const before = type.includes("friction") ? 280 : 210;
+  ctx.fillStyle="#69d8cb";ctx.fillRect(690,410,42,-before);
+  ctx.fillStyle="#ffbf5c";ctx.fillRect(750,410,42,revealed? -Math.min(180,80+Math.abs(value)*15):-70);
+  label(ctx,"K / U",678,448,"#dce6f2",16);
+  if (revealed) evidenceCaption(ctx,type.includes("power")?"同功：時間 ↓　功率 ↑":type.includes("friction")?"機械能 → 內能（總能量守恆）":type.includes("speed")?"mgh = ½mv²｜v ≈ 9.9 m/s":"功與能量模型已平衡");
+}
+
+function drawElectricEvidence(ctx, type, value, revealed) {
+  if (type.includes("series") || type.includes("parallel")) {
+    ctx.strokeStyle="#84a7ff";ctx.lineWidth=7;ctx.beginPath();ctx.rect(190,190,620,210);ctx.stroke();
+    if (type.includes("parallel")) {ctx.beginPath();ctx.moveTo(350,190);ctx.lineTo(350,400);ctx.moveTo(650,190);ctx.lineTo(650,400);ctx.stroke();}
+    ctx.fillStyle="#ffbf5c";ctx.fillRect(480,380,45,40);label(ctx,"12 V",460,455,"#ffdc8b",18);
+    ctx.fillStyle="#b99cff";ctx.fillRect(330,170,90,40);ctx.fillRect(600,170,90,40);
+    if (revealed) evidenceCaption(ctx,type.includes("parallel")?"Req = 2 Ω｜I總 = 6 A":"R總 = 10 Ω｜I = 1.2 A");
+    return;
+  }
+  dot(ctx,330,300,"#ff806b",42); label(ctx,"+",314,315,"white",40);
+  dot(ctx,680,300,type.includes("charge")&&value<0?"#84a7ff":"#ff806b",42);label(ctx,type.includes("charge")&&value<0?"−":"+",664,315,"white",40);
+  for(let i=-2;i<=2;i++) arrow(ctx,385,300+i*24,620,300+i*24,"#84a7ff","");
+  if (revealed) evidenceCaption(ctx,type.includes("field")?"正試驗電荷受力方向 = 電場方向":type.includes("force")?"F = k|q₁q₂|/r² = 0.60 N":"同號相斥・異號相吸");
+}
+
+function drawMagneticEvidence(ctx, type, value, revealed) {
+  for(let y=170;y<=400;y+=55) for(let x=210;x<=790;x+=65) { label(ctx,"×",x,y,"rgba(105,219,203,.72)",25); }
+  if (type.includes("poles")) {
+    ctx.fillStyle="#ff806b";ctx.fillRect(230,270,210,80);ctx.fillStyle="#84a7ff";ctx.fillRect(560,270,210,80);label(ctx,"N",310,325,"white",30);label(ctx,"N",640,325,"white",30);
+  } else if (type.includes("wire")) {
+    ctx.strokeStyle="#ffd36d";ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(220,340);ctx.lineTo(760,230);ctx.stroke();arrow(ctx,490,280,490,155,"#ff806b","F");
+  } else {
+    arrow(ctx,250,330,470,330,"#ffbf5c","v");
+    ctx.strokeStyle="#ff806b";ctx.lineWidth=8;ctx.beginPath();ctx.arc(470,210,120,Math.PI/2,Math.PI*1.9);ctx.stroke();
+  }
+  if (revealed) evidenceCaption(ctx,type.includes("induction")||type.includes("emf")?"|ε| = N|ΔΦ|/Δt｜變化越快，感應越強":type.includes("radius")?"qvB = mv²/r｜r = 3.0 m":"磁力垂直運動／電流方向");
+}
+
+function drawOpticsEvidence(ctx, type, value, revealed) {
+  const interfaceY=315, normalX=500;
+  ctx.strokeStyle="#d8e6f5";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(150,interfaceY);ctx.lineTo(850,interfaceY);ctx.stroke();
+  ctx.setLineDash([10,8]);ctx.strokeStyle="#b8c5d5";ctx.beginPath();ctx.moveTo(normalX,140);ctx.lineTo(normalX,470);ctx.stroke();ctx.setLineDash([]);
+  arrow(ctx,250,145,normalX,interfaceY,"#ffbf5c","入射光");
+  if(type.includes("reflection")) arrow(ctx,normalX,interfaceY,750,145,"#84a7ff","反射光");
+  else if(type.includes("lens")) {ctx.strokeStyle="#b99cff";ctx.lineWidth=12;ctx.beginPath();ctx.arc(570,315,95,-Math.PI/2,Math.PI/2);ctx.arc(430,315,95,Math.PI/2,Math.PI*1.5);ctx.stroke();arrow(ctx,normalX,interfaceY,760,400,"#84a7ff","折射光");}
+  else arrow(ctx,normalX,interfaceY,625,455,"#84a7ff","折射光");
+  if(revealed) evidenceCaption(ctx,type.includes("critical")||type.includes("tir")?"高 n → 低 n 且 θ > θc：全反射":type.includes("lens")||type.includes("magnify")?"1/f = 1/do + 1/di｜光線幾何已驗證":"角度由法線量起｜n₁sinθ₁=n₂sinθ₂");
+}
+
+function drawThermalEvidence(ctx, type, value, revealed) {
+  ctx.strokeStyle="#d4dce8";ctx.lineWidth=6;ctx.strokeRect(250,170,500,260);
+  const hot = type.includes("flow") ? 70 : 35;
+  for(let i=0;i<24;i++) { const x=285+(i%8)*60, y=210+Math.floor(i/8)*75; dot(ctx,x,y,i<12?"#ff806b":"#84a7ff",revealed&&i<12?hot/8:7); }
+  if(type.includes("compress")){ctx.fillStyle="#ffbf5c";ctx.fillRect(240,revealed?230:150,520,28);arrow(ctx,500,125,500,revealed?220:145,"#ffbf5c","外界做功");}
+  if (revealed) evidenceCaption(ctx,type.includes("flow")?"高溫 → 低溫，直到熱平衡":type.includes("gas")?"定容：P ∝ T（使用 K）":type.includes("firstlaw")?"ΔU = Q − Wby = 300 J":"能量帳目：熱、功與內能");
+}
+
+function drawCelestialEvidence(ctx, type, value, revealed) {
+  const cx=500,cy=300;dot(ctx,cx,cy,"#ffbf5c",55);
+  ctx.strokeStyle="rgba(145,168,255,.7)";ctx.lineWidth=4;
+  const radius = type.includes("period")&&revealed?220:170;
+  ctx.beginPath();ctx.arc(cx,cy,radius,0,Math.PI*2);ctx.stroke();
+  const sx=cx+radius,sy=cy;dot(ctx,sx,sy,"#91a8ff",20);
+  arrow(ctx,sx,sy,sx,sy-120,"#65ded2","v");arrow(ctx,sx-8,sy,cx+75,cy,"#ff806b","a / Fg");
+  if (revealed) evidenceCaption(ctx,type.includes("gravity")?"F ∝ 1/r²｜距離 2 倍，引力 1/4":type.includes("kepler")?"T² ∝ r³｜半徑 4 倍，週期 8 倍":"引力提供向心力｜軌道模型已驗證");
 }
 
 window.addEventListener("popstate", render);
