@@ -3,7 +3,7 @@
   "version": "5.0.0",
   "private": true,
   "scripts": {
-    "test": "node tests/models.cjs && node tests/site-integrity.cjs && node tests/learning-contracts.cjs && node tests/physics-audit.cjs",
+    "test": "node tests/models.cjs && node tests/site-integrity.cjs && node tests/learning-contracts.cjs && node tests/physics-audit.cjs && node tests/live-visuals.cjs",
     "build": "node scripts/build.cjs"
   }
 }
