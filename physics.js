@@ -29,8 +29,8 @@
     return (muscleForce * muscleArm - torsoWeight * torsoArm) / loadArm;
   }
 
-  function achillesWeight(tendonForce, angleDegrees, tendonArm, bodyArm) {
-    return tendonForce * Math.sin(deg(angleDegrees)) * tendonArm / bodyArm;
+  function achillesNormalForce(tendonForce, tendonArm, forefootArm) {
+    return tendonForce * tendonArm / forefootArm;
   }
 
   function typeB(leastCount) { return leastCount / Math.sqrt(12); }
@@ -58,7 +58,7 @@
     lineCounts,
     tricepsWeight,
     deadliftWeight,
-    achillesWeight,
+    achillesNormalForce,
     typeB,
     rootSumSquare,
     mean,
