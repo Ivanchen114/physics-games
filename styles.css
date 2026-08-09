@@ -135,6 +135,8 @@ a { color: inherit; }
 .audio-toggle > span:first-child { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; color: #081018; background: #6c7889; font-size: 1rem; }
 .audio-toggle.is-on { border-color: rgba(85, 226, 219, .5); color: var(--cyan-2); }
 .audio-toggle.is-on > span:first-child { background: var(--cyan); box-shadow: 0 0 14px rgba(85, 226, 219, .42); }
+.audio-toggle [data-audio-label] { display: none; }
+.audio-toggle { width: 48px; padding: 0; justify-content: center; }
 
 /* Map and common chrome */
 .topbar {
@@ -222,8 +224,12 @@ a { color: inherit; }
 .control-step, .reason-step, .calculation-step { display: none; }
 .control-step.visible, .reason-step.visible, .calculation-step.visible { display: block; }
 .slider-head { display: flex; justify-content: space-between; gap: 14px; align-items: end; }
-.slider-head label { font-weight: 800; }
+.slider-head label, .slider-head .control-label { font-weight: 800; }
 .slider-head output { color: var(--track); font-size: 1.15rem; font-weight: 900; }
+.control-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin: 16px 0 12px; }
+.control-option { min-height: 52px; padding: .75rem 1rem; border: 1px solid var(--line); border-radius: 14px; color: #eaf0f7; background: #101a2a; cursor: pointer; font-size: 1rem; font-weight: 900; }
+.control-option:hover, .control-option:focus-visible { border-color: var(--track); outline: none; }
+.control-option.selected { border-color: var(--track); color: #edffff; background: var(--track-soft); box-shadow: 0 0 0 2px rgba(85, 226, 219, .12), 0 10px 28px rgba(0, 0, 0, .22); }
 input[type="range"] { width: 100%; margin: 17px 0 10px; accent-color: var(--track); }
 .target-note { margin: 0 0 14px; color: var(--muted); font-size: .84rem; }
 .model-choices { margin-bottom: 16px; }
@@ -281,8 +287,6 @@ input[type="range"] { width: 100%; margin: 17px 0 10px; accent-color: var(--trac
   .scene-frame { border-radius: 16px; }
   .action-row { align-items: stretch; flex-direction: column; }
   .primary-button, .secondary-button { width: 100%; }
-  .audio-toggle [data-audio-label] { display: none; }
-  .audio-toggle { width: 48px; padding: 0; justify-content: center; }
 }
 
 @media (max-width: 460px) {

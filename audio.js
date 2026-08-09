@@ -104,6 +104,7 @@
     const button = document.querySelector("[data-audio-toggle]");
     if (!button) return;
     button.setAttribute("aria-pressed", String(enabled));
+    button.setAttribute("aria-label", enabled ? "關閉神殿音景" : "開啟神殿音景");
     button.classList.toggle("is-on", enabled);
     button.querySelector("[data-audio-label]").textContent = enabled ? "音景：開" : "音景：關";
     button.title = enabled ? "關閉神殿音景" : "開啟神殿音景";

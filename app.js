@@ -229,8 +229,8 @@ function foundationChallenge(level) {
     <hr class="phase-divider">
     <div class="control-step" data-control-step>
       <p class="step-label">第二步｜操作變因並取得證據</p>
-      <div class="slider-head"><label for="level-control">${level.control.label}</label><output data-readout>${level.control.base} ${level.control.unit}</output></div>
-      <input id="level-control" type="range" min="${level.control.min}" max="${level.control.max}" step="${level.control.step}" value="${level.control.base}" data-control>
+      <div class="slider-head"><span class="control-label">${level.control.label}</span><output data-readout>${level.control.base} ${level.control.unit}</output></div>
+      ${controlMarkup(level.control)}
       <p class="target-note">把控制調到 <strong>${level.control.target} ${level.control.unit}</strong>，再啟動機關。</p>
       <button type="button" class="primary-button" data-run>啟動機關</button>
     </div>
@@ -241,6 +241,17 @@ function foundationChallenge(level) {
     </div>
     <div class="feedback" data-feedback aria-live="polite">先鎖定預測；結果不會在預測前顯示。</div>
   </section>`;
+}
+
+function controlMarkup(control) {
+  const count = Math.round((Number(control.max) - Number(control.min)) / Number(control.step)) + 1;
+  if (Number.isFinite(count) && count >= 2 && count <= 3) {
+    const values = Array.from({ length: count }, (_, index) => Number(control.min) + index * Number(control.step));
+    return `<div class="control-options" role="group" aria-label="${control.label}">
+      ${values.map(value => `<button type="button" class="control-option ${value === Number(control.base) ? "selected" : ""}" data-control-option="${value}" aria-pressed="${value === Number(control.base)}">${value} ${control.unit}</button>`).join("")}
+    </div><input id="level-control" type="hidden" value="${control.base}" data-control>`;
+  }
+  return `<input id="level-control" type="range" min="${control.min}" max="${control.max}" step="${control.step}" value="${control.base}" aria-label="${control.label}" data-control>`;
 }
 
 function advancedChallenge(level) {
@@ -295,6 +306,16 @@ function bindFoundation(level, index) {
     }
     drawVisual(level, { value: Number(controlInput.value), revealed: false });
   });
+  main.querySelectorAll("[data-control-option]").forEach(button => button.addEventListener("click", () => {
+    sound("select");
+    main.querySelectorAll("[data-control-option]").forEach(option => {
+      const selected = option === button;
+      option.classList.toggle("selected", selected);
+      option.setAttribute("aria-pressed", String(selected));
+    });
+    controlInput.value = button.dataset.controlOption;
+    controlInput.dispatchEvent(new Event("input", { bubbles: true }));
+  }));
   main.querySelector("[data-run]").addEventListener("click", () => {
     const value = Number(controlInput.value);
     attempts += 1;
@@ -475,7 +496,22 @@ function drawTitanVisual(ctx, type, value, revealed) {
     arrow(ctx,pivotX-20,pivotY+15,pivotX-150,pivotY+75,"#55e2db","三頭肌 300 N");
     ctx.strokeStyle="#ffd86f";ctx.lineWidth=5;ctx.setLineDash([10,8]);ctx.beginPath();ctx.arc(pivotX,pivotY,86,-Math.PI/3,Math.PI/2);ctx.stroke();ctx.setLineDash([]);
     label(ctx,"θ = 150°",420,365,"#ffdc8b",22);
-  } else if (["pivot","lever-distance","force-direction","posture","biceps","deadlift","achilles"].includes(type)) {
+  } else if (type === "pivot") {
+    const elbowX=300,elbowY=360,insertionX=390,insertionY=350,handX=720,handY=340,ballX=720,ballY=180;
+    ctx.strokeStyle="rgba(255,255,255,.78)";ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(elbowX,elbowY);ctx.lineTo(handX,handY);ctx.stroke();
+    ctx.fillStyle="#ffd86f";ctx.beginPath();ctx.moveTo(elbowX-24,elbowY+48);ctx.lineTo(elbowX+24,elbowY+48);ctx.lineTo(elbowX,elbowY+6);ctx.closePath();ctx.fill();
+    arrow(ctx,insertionX,insertionY,330,215,"#55e2db","二頭肌拉力");
+    arrow(ctx,ballX,ballY,ballX,430,"#ff766c","石球重力");
+    const markers=[{x:handX,y:handY},{x:elbowX,y:elbowY}];
+    markers.forEach((marker,index)=>{
+      const active=Number(value)===index+1;
+      ctx.fillStyle=active?"#ffffff":"rgba(220,228,239,.72)";ctx.strokeStyle=active?"#ffd86f":"rgba(255,255,255,.55)";ctx.lineWidth=active?8:4;
+      ctx.beginPath();ctx.arc(marker.x,marker.y,active?22:17,0,Math.PI*2);ctx.fill();ctx.stroke();
+      label(ctx,String(index+1),marker.x-7,marker.y+7,"#101722",18);
+    });
+    label(ctx,"1 號",handX+28,handY+8,"#dbe3ef",18);label(ctx,"2 號",elbowX-62,elbowY-25,"#ffdc8b",18);
+    if(revealed){label(ctx,"支點",elbowX-30,elbowY+82,"#ffdc8b",21);evidenceCaption(ctx,"2 號位於肘關節：前臂繞此處轉動");}
+  } else if (["lever-distance","force-direction","posture","biceps","deadlift","achilles"].includes(type)) {
     ctx.strokeStyle="rgba(255,255,255,.72)";ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(250,360);ctx.lineTo(720,360);ctx.stroke();
     dot(ctx,300,360,"#ffd86f",14); label(ctx,"支點",260,405,"#ffdc8b",18);
     const distance = type === "lever-distance" ? (revealed ? 360 : 130) : type === "posture" ? (revealed ? 150 : 400) : 300;
