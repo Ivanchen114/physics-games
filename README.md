@@ -1,2 +1,15 @@
-# physics-games
-SSSH Physics Game Series
+# 法則神殿｜高中物理雙軌闖關
+
+松山高中物理科設計的五座物理神殿。每座神殿分成：
+
+- 高一初階殿：觀察、預測與質性判斷
+- 高二／高三進階殿：模型、計算與證據驗證
+
+## 本機驗證
+
+```bash
+npm test
+npm run build
+```
+
+正式建置輸出位於 `dist/client`。`games/` 保留舊版五座神殿作為歷史版本，正式站不會輸出該目錄。
