@@ -220,6 +220,20 @@ function stageSession() {
 }
 
 function foundationChallenge(level) {
+  const evidenceStep = level.control.kind === "reveal"
+    ? `<div class="control-step" data-control-step>
+      <p class="step-label">第二步｜啟動機關並取得證據</p>
+      <p class="question">顯示前臂繞肘關節轉動的物理證據。</p>
+      <input id="level-control" type="hidden" value="${level.control.target}" data-control>
+      <button type="button" class="primary-button" data-run>顯示轉動證據</button>
+    </div>`
+    : `<div class="control-step" data-control-step>
+      <p class="step-label">第二步｜操作變因並取得證據</p>
+      <div class="slider-head"><span class="control-label">${level.control.label}</span><output data-readout>${formatControlValue(level.control.base)} ${level.control.unit}</output></div>
+      ${controlMarkup(level.control)}
+      <p class="target-note">把控制調到 <strong>${formatControlValue(level.control.target)} ${level.control.unit}</strong>，再啟動機關。</p>
+      <button type="button" class="primary-button" data-run>啟動機關</button>
+    </div>`;
   return `<section class="challenge-card">
     <div class="prediction-step">
       <p class="step-label">第一步｜鎖定質性預測</p><p class="question">${level.prediction.question}</p>
@@ -227,13 +241,7 @@ function foundationChallenge(level) {
       <div class="action-row"><span class="attempts" data-attempts>尚未啟動機關</span><button type="button" class="primary-button" data-lock disabled>鎖定預測</button></div>
     </div>
     <hr class="phase-divider">
-    <div class="control-step" data-control-step>
-      <p class="step-label">第二步｜操作變因並取得證據</p>
-      <div class="slider-head"><span class="control-label">${level.control.label}</span><output data-readout>${formatControlValue(level.control.base)} ${level.control.unit}</output></div>
-      ${controlMarkup(level.control)}
-      <p class="target-note">把控制調到 <strong>${formatControlValue(level.control.target)} ${level.control.unit}</strong>，再啟動機關。</p>
-      <button type="button" class="primary-button" data-run>啟動機關</button>
-    </div>
+    ${evidenceStep}
     <div class="reason-step" data-reason-step>
       <hr class="phase-divider"><p class="step-label">第三步｜用證據選出理由</p><p class="question">${level.reason.question}</p>
       <div class="choices" data-reasons>${choiceButtons(level.reason.options, "reason")}</div>
@@ -297,10 +305,13 @@ function bindFoundation(level, index) {
     lock.disabled = true;
     main.querySelectorAll("[data-prediction]").forEach(button => { button.disabled = true; });
     controlStep.classList.add("visible");
-    feedback.textContent = `預測已鎖定。請把${level.control.label}調到目標值，再啟動機關。`;
+    feedback.textContent = level.control.kind === "reveal"
+      ? "預測已鎖定。請顯示轉動證據。"
+      : `預測已鎖定。請把${level.control.label}調到目標值，再啟動機關。`;
   });
   controlInput.addEventListener("input", () => {
-    main.querySelector("[data-readout]").textContent = `${formatControlValue(controlInput.value)} ${level.control.unit}`;
+    const readout = main.querySelector("[data-readout]");
+    if (readout) readout.textContent = `${formatControlValue(controlInput.value)} ${level.control.unit}`;
     if (evidenceValid) {
       evidenceValid = false;
       reasonStep.classList.remove("visible");
@@ -513,18 +524,16 @@ function drawTitanVisual(ctx, type, value, revealed) {
   } else if (type === "pivot") {
     const elbowX=300,elbowY=360,insertionX=390,insertionY=350,handX=720,handY=340,ballX=720,ballY=180;
     ctx.strokeStyle="rgba(255,255,255,.78)";ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(elbowX,elbowY);ctx.lineTo(handX,handY);ctx.stroke();
-    ctx.fillStyle="#ffd86f";ctx.beginPath();ctx.moveTo(elbowX-24,elbowY+48);ctx.lineTo(elbowX+24,elbowY+48);ctx.lineTo(elbowX,elbowY+6);ctx.closePath();ctx.fill();
     forceArrow(ctx,insertionX,insertionY,330,215,"#55e2db","二頭肌拉力");
     forceArrow(ctx,ballX,ballY,ballX,430,"#ff766c","石球重力");
-    const markers=[{x:handX,y:handY},{x:elbowX,y:elbowY}];
-    markers.forEach((marker,index)=>{
-      const active=Number(value)===index+1;
-      ctx.fillStyle=active?"#ffffff":"rgba(220,228,239,.72)";ctx.strokeStyle=active?"#ffd86f":"rgba(255,255,255,.55)";ctx.lineWidth=active?8:4;
-      ctx.beginPath();ctx.arc(marker.x,marker.y,active?22:17,0,Math.PI*2);ctx.fill();ctx.stroke();
-      label(ctx,String(index+1),marker.x-7,marker.y+7,"#101722",18);
-    });
-    label(ctx,"1 號",handX+28,handY+8,"#dbe3ef",18);label(ctx,"2 號",elbowX-62,elbowY-25,"#ffdc8b",18);
-    if(revealed){label(ctx,"支點",elbowX-30,elbowY+82,"#ffdc8b",21);evidenceCaption(ctx,"2 號位於肘關節：前臂繞此處轉動");}
+    dot(ctx,elbowX,elbowY,revealed?"#ffd86f":"rgba(220,228,239,.85)",revealed?14:10);
+    label(ctx,"肘關節",elbowX-45,elbowY-28,revealed?"#ffdc8b":"#dbe3ef",18);
+    if(revealed){
+      ctx.fillStyle="#ffd86f";ctx.beginPath();ctx.moveTo(elbowX-24,elbowY+48);ctx.lineTo(elbowX+24,elbowY+48);ctx.lineTo(elbowX,elbowY+8);ctx.closePath();ctx.fill();
+      ctx.strokeStyle="#ffdc8b";ctx.lineWidth=5;ctx.beginPath();ctx.arc(elbowX,elbowY,68,-.85,.65);ctx.stroke();
+      label(ctx,"支點：前臂繞此處轉動",elbowX-65,elbowY+92,"#ffdc8b",20);
+      evidenceCaption(ctx,"肘關節是前臂轉動中心，因此在槓桿模型中是支點");
+    }
   } else if (type === "lever-distance") {
     const px=250,py=355,tailX=px+Number(value)*12;
     ctx.strokeStyle="rgba(255,255,255,.78)";ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(780,py);ctx.stroke();

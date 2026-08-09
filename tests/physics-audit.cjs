@@ -30,6 +30,8 @@ for (const level of levels) {
 }
 
 assert.deepEqual(byCode["G-A4"].inputs.map(input => input.answer), [1000]);
+assert.equal(byCode["G-F1"].control.kind, "reveal");
+assert.doesNotMatch(JSON.stringify(byCode["G-F1"]), /標記|1 號|2 號/);
 assert.deepEqual(byCode["W-A3"].inputs.map(input => input.answer), [7, 6]);
 assert.equal(byCode["S-F1"].control.target, 2);
 assert.equal(byCode["S-F4"].control.target, 1.6);
@@ -41,6 +43,7 @@ assert.match(app, /tailX, tailY\) is the point of application/);
 assert.match(app, /function forceArrow\(ctx, tailX, tailY, headX, headY/);
 assert.match(app, /同圖箭長比例 300:50 = 6:1/);
 assert.match(app, /放出光子 ΔE₃₂/);
+assert.doesNotMatch(app, /1 號|2 號|把標記|移動標記/);
 assert.doesNotMatch(app, /arrow\(ctx,500,285,355,230[^\n]*mg sinθ/);
 
 console.log(`Physics audit contracts: ${levels.length} levels reachable, answerable, and vector invariants guarded`);
