@@ -4,7 +4,7 @@ const physics = require("../physics.js");
 
 assert.equal(data.temples.length, 12);
 assert.deepEqual(data.totals, { foundation: 48, advanced: 49 });
-assert.equal(data.version, "4.0.0");
+assert.equal(data.version, "4.1.0");
 assert.match(data.world.premise, /十二座神殿/);
 
 assert.ok(Math.abs(physics.tricepsWeight(300, 5, 30, 150) - 100) < 1e-9);

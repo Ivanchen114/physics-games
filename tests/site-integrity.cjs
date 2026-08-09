@@ -4,7 +4,7 @@ const path = require("node:path");
 const data = require("../data.js");
 const root = path.resolve(__dirname, "..");
 
-for (const filename of ["index.html", "temple.html", "styles.css", "data.js", "physics.js", "home.js", "app.js", "favicon.svg", "og.png"]) {
+for (const filename of ["index.html", "temple.html", "styles.css", "data.js", "physics.js", "audio.js", "home.js", "app.js", "favicon.svg", "og.png"]) {
   assert.ok(fs.existsSync(path.join(root, filename)), `${filename} missing`);
 }
 
@@ -41,6 +41,17 @@ assert.match(app, /drawMeasureVisual/);
 assert.match(app, /drawExpansionVisual/);
 assert.match(app, /law-temple-v4-player/);
 assert.match(app, /神火耗盡/);
+assert.match(app, /spawnSealBurst/);
+assert.match(app, /TempleAudio/);
+const audio = fs.readFileSync(path.join(root, "audio.js"), "utf8");
+assert.match(audio, /AudioContext/);
+assert.match(audio, /law-temple-audio-enabled/);
+assert.match(audio, /aria-pressed/);
+for (const cue of ["evidence", "damage", "rewind", "success"]) assert.match(audio, new RegExp(`${cue}:`));
+const home = fs.readFileSync(path.join(root, "home.js"), "utf8");
+assert.match(home, /nextMission/);
+assert.match(home, /四幕遠征地圖/);
+assert.match(home, /先預測/);
 assert.equal(artAssets.size, 28);
 
-console.log("V4 site integrity: routes, 28 art assets, flame recovery and evidence invalidation OK");
+console.log("V4.1 site integrity: routes, 28 art assets, recoverable flame, campaign guidance and procedural audio OK");

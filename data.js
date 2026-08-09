@@ -244,7 +244,7 @@
   }, { foundation: 0, advanced: 0 });
 
   return {
-    version: "4.0.0",
+    version: "4.1.0",
     world: {
       title: "法則神殿：失序紀元",
       role: "你是最後一位法則修復者。",

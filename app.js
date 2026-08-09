@@ -17,6 +17,7 @@ let rewinds = 0;
 
 document.body.dataset.track = track;
 document.documentElement.style.setProperty("--temple-color", temple.color);
+window.TempleAudio?.setTheme(temple.id);
 
 function readProgress(name) {
   try {
@@ -57,6 +58,20 @@ function playerRank(xp = profile.xp) {
   if (xp >= 900) return "雙印解讀者";
   if (xp >= 300) return "神火行者";
   return "法則見習者";
+}
+
+function sound(name) {
+  window.TempleAudio?.play(name);
+}
+
+function spawnSealBurst() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const burst = document.createElement("div");
+  burst.className = "seal-burst";
+  burst.setAttribute("aria-hidden", "true");
+  burst.innerHTML = Array.from({ length: 16 }, (_, index) => `<span style="--angle:${index * 22.5}deg;--delay:${index % 4 * 35}ms"></span>`).join("");
+  document.body.append(burst);
+  setTimeout(() => burst.remove(), 1200);
 }
 
 function levelUnlocked(index) {
@@ -128,7 +143,7 @@ function renderMap() {
       <div class="track-progress"><strong>${route.label}進度 ${finished} / ${levels.length}</strong><div class="progress-track"><div class="progress-bar" style="width:${finished / levels.length * 100}%"></div></div></div>
     </div>
   </section>`;
-  main.querySelectorAll("[data-level]").forEach(button => button.addEventListener("click", () => setLocation(button.dataset.level)));
+  main.querySelectorAll("[data-level]").forEach(button => button.addEventListener("click", () => { sound("enter"); setLocation(button.dataset.level); }));
 }
 
 function renderStage(level, index, session) {
@@ -158,6 +173,7 @@ function renderStage(level, index, session) {
   </section>`;
   main.querySelector("[data-back]").addEventListener("click", () => setLocation(null));
   main.querySelector("[data-hint]").addEventListener("click", event => {
+    sound("hint");
     hintOpen = !hintOpen;
     if (hintOpen) usedHint = true;
     main.querySelector("[data-hint-text]").textContent = hintOpen ? level.hint : "";
@@ -181,6 +197,7 @@ function loseFlame(level) {
   mistakes += 1;
   flame -= 1;
   if (flame > 0) {
+    sound("damage");
     updateFlame();
     return `<span class="damage-note">神火 −1，剩餘 ${flame} 格。</span>`;
   }
@@ -193,6 +210,7 @@ function loseFlame(level) {
   if (hintText) hintText.textContent = level.hint;
   if (hintButton) hintButton.textContent = "收起線索";
   updateFlame();
+  sound("rewind");
   return `<span class="rewind-note">神火耗盡：${temple.guardian} 啟動第 ${rewinds} 次回溯，恢復 2 格神火並揭示一層線索。</span>`;
 }
 
@@ -252,11 +270,13 @@ function bindFoundation(level, index) {
   const feedback = main.querySelector("[data-feedback]");
 
   main.querySelectorAll("[data-prediction]").forEach(button => button.addEventListener("click", () => {
+    sound("select");
     selectedPrediction = button.dataset.prediction;
     selectOne("[data-prediction]", button);
     lock.disabled = false;
   }));
   lock.addEventListener("click", () => {
+    sound("lock");
     lock.textContent = "預測已鎖定";
     lock.disabled = true;
     main.querySelectorAll("[data-prediction]").forEach(button => { button.disabled = true; });
@@ -284,12 +304,14 @@ function bindFoundation(level, index) {
       return;
     }
     evidenceValid = true;
+    sound("evidence");
     drawVisual(level, { value, revealed: true });
     reasonStep.classList.add("visible");
     feedback.className = "feedback";
     feedback.textContent = selectedPrediction === level.prediction.correct ? "證據已出現，而且與你的預測一致。現在選出因果理由。" : "證據已出現，但和你的預測不同。仍請先根據證據判斷原因。";
   });
   main.querySelectorAll("[data-reason]").forEach(button => button.addEventListener("click", () => {
+    sound("select");
     selectedReason = button.dataset.reason;
     selectOne("[data-reason]", button);
     main.querySelector("[data-submit-reason]").disabled = false;
@@ -317,6 +339,7 @@ function bindAdvanced(level, index) {
   const feedback = main.querySelector("[data-feedback]");
   const calculation = main.querySelector("[data-calculation-step]");
   main.querySelectorAll("[data-model]").forEach(button => button.addEventListener("click", () => {
+    sound("select");
     selectedModel = button.dataset.model;
     selectOne("[data-model]", button);
     calculation.classList.add("visible");
@@ -340,6 +363,7 @@ function bindAdvanced(level, index) {
     const modelOK = selectedModel === level.correctModel;
     const valuesOK = results.every(result => result.ok);
     evidenceValid = true;
+    sound("evidence");
     drawVisual(level, { revealed: true, values, modelOK, valuesOK });
     markChoice("model", level.correctModel);
     if (modelOK && valuesOK) completeLevel(level, index, feedback);
@@ -394,6 +418,8 @@ function completeLevel(level, index, feedback) {
   const rewardText = firstClear ? `<br><span class="reward-note">+${reward} 法則經驗・目前階級：${playerRank()}</span>` : `<br><span class="reward-note">重試完成，不重複計算經驗。</span>`;
   feedback.className = "feedback ok";
   feedback.innerHTML = `<strong>法則刻印已取得。</strong><br>${level.explanation}${rewardText}${trackEnding}<br><button type="button" class="primary-button next-button" data-next>${index + 1 < levels.length ? "前往下一關" : "返回關卡地圖"}</button>`;
+  sound("success");
+  if (firstClear) spawnSealBurst();
   main.querySelector("[data-next]").addEventListener("click", () => index + 1 < levels.length ? setLocation(levels[index + 1].code) : setLocation(null));
 }
 
