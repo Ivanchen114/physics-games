@@ -1,9 +1,9 @@
 {
   "name": "law-temple-v5",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "private": true,
   "scripts": {
-    "test": "node tests/models.cjs && node tests/site-integrity.cjs && node tests/learning-contracts.cjs && node tests/physics-audit.cjs && node tests/live-visuals.cjs && node tests/exploration.cjs",
+    "test": "node tests/models.cjs && node tests/site-integrity.cjs && node tests/learning-contracts.cjs && node tests/physics-audit.cjs && node tests/disclosure-contracts.cjs && node tests/live-visuals.cjs && node tests/exploration.cjs",
     "build": "node scripts/build.cjs"
   }
 }

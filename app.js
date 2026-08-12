@@ -14,6 +14,7 @@ let flame = 3;
 let mistakes = 0;
 let usedHint = false;
 let rewinds = 0;
+let episodeTrace = null;
 
 document.body.dataset.track = track;
 document.documentElement.style.setProperty("--temple-color", temple.color);
@@ -112,11 +113,12 @@ function renderMap() {
         <p class="eyebrow">TEMPLE ${temple.number} · ${temple.eyebrow}</p>
         <p class="story-act">${temple.act} · ${temple.region}</p>
         <span class="route-badge">${route.grade} · ${route.task}</span>
+        <span class="curriculum-badge">${temple.curriculum?.[track] || route.grade}</span>
         <h1>${temple.name}</h1>
         <p class="lead">${temple.description}</p>
         <nav class="track-switch" aria-label="切換學習路線">
-          <a class="${track === "foundation" ? "current" : ""}" href="temple.html?temple=${temple.id}&track=foundation">初階殿</a>
-          <a class="${track === "advanced" ? "current" : ""}" href="temple.html?temple=${temple.id}&track=advanced">進階殿</a>
+          <a class="${track === "foundation" ? "current" : ""}" href="temple.html?temple=${temple.id}&track=foundation">初階殿・${temple.curriculum?.foundation?.startsWith("加深") ? "選修" : "必修"}</a>
+          <a class="${track === "advanced" ? "current" : ""}" href="temple.html?temple=${temple.id}&track=advanced">進階殿・${temple.curriculum?.advanced?.includes("必修") ? "必修＋選修" : "選修"}</a>
         </nav>
       </div>
     </header>
@@ -130,13 +132,14 @@ function renderMap() {
       <section class="guardian-panel" aria-label="神殿故事">
         <div><span>神殿守護者</span><strong>${temple.guardian}</strong><small>等待修復：${temple.relic}</small></div>
         <p>${temple.crisis}</p><blockquote>「${temple.oath}」</blockquote>
+        <details class="guardian-history"><summary>讀取守護者留下的歷史刻痕</summary><p>${temple.history}</p></details>
       </section>
       <section class="level-grid" aria-label="${route.label}關卡">
         ${levels.map((level, index) => {
           const locked = !levelUnlocked(index);
           const done = completed.has(level.code);
           return `<button type="button" class="level-card" data-level="${level.code}" ${locked ? "disabled" : ""}>
-            <span class="level-code">${level.code} · ${level.time}</span><h2>${level.title}</h2><p>${level.summary}</p>
+            <span class="level-code">${level.code} · ${level.time}</span><h2>${level.title}</h2><p>${level.storyTeaser || level.summary}</p>
             <footer><span>${locked ? "完成前一關後解鎖" : done ? "重新挑戰" : "進入機關"}</span><span class="${done ? "done" : ""}">${done ? "已完成 ✓" : locked ? "鎖定" : "→"}</span></footer>
           </button>`;
         }).join("")}
@@ -154,16 +157,23 @@ function renderStage(level, index, session) {
   mistakes = session?.mistakes || 0;
   usedHint = Boolean(session?.usedHint);
   rewinds = session?.rewinds || 0;
+  episodeTrace = session?.episodeTrace || {
+    assessedClaim: level.assessedClaim,
+    modelId: level.modelId,
+    comparisonPlan: null,
+    evidenceRun: null,
+    status: "planning"
+  };
   document.title = `${level.title}｜${temple.name} ${route.label}`;
   main.innerHTML = `<section class="stage-page">
     ${topbar(`${temple.name} · ${route.label}`, `${index + 1} / ${levels.length}`, "map")}
     <div class="shell stage-layout">
       <aside class="brief-panel">
-        <div class="stage-badges"><span class="route-badge">${route.grade} · ${route.task}</span><span class="guardian-badge">${temple.guardian}</span></div>
+        <div class="stage-badges"><span class="route-badge">${route.grade} · ${route.task}</span><span class="curriculum-badge">${temple.curriculum?.[track] || route.grade}</span><span class="guardian-badge">${temple.guardian}</span></div>
         <section class="flame-panel" aria-label="神火狀態"><div><span>修復者神火</span><strong data-flame>${flameGlyphs()}</strong></div><small data-flame-note>錯誤會使神火衰減；歸零時守護者會啟動回溯，不會封鎖學習。</small></section>
-        <h1>${level.title}</h1><p class="mission">${level.mission}</p>
+        <h1>${level.title}</h1><p class="mission">${level.storyProblem || level.mission}</p>
         <div class="metadata"><div><span>任務類型</span><strong>${level.skill}</strong></div><div><span>需要能力</span><strong>${level.prerequisites}</strong></div><div><span>預估時間</span><strong>${level.time}</strong></div></div>
-        <section class="known"><h2>已知條件</h2><ul>${level.known.map(item => `<li>${item}</li>`).join("")}</ul></section>
+        <section class="known"><h2>進入前能確認的事</h2><ul>${(level.prePlanKnown || level.known).map(item => `<li>${item}</li>`).join("")}</ul></section>
         <section class="hint-box"><button type="button" data-hint>${hintOpen ? "收起線索" : "查看一層線索"}</button><p data-hint-text aria-live="polite">${hintOpen ? level.hint : ""}</p></section>
       </aside>
       <div class="game-panel">
@@ -182,7 +192,7 @@ function renderStage(level, index, session) {
   });
   if (track === "foundation") bindFoundation(level, index);
   else bindAdvanced(level, index);
-  drawVisual(level, { value: level.control?.base, revealed: false });
+  drawVisual(level, { value: level.control?.base, phase: "pre-plan" });
 }
 
 function flameGlyphs() {
@@ -216,19 +226,19 @@ function loseFlame(level) {
 }
 
 function stageSession() {
-  return { attempts, hintOpen, flame, mistakes, usedHint, rewinds };
+  return { attempts, hintOpen, flame, mistakes, usedHint, rewinds, episodeTrace };
 }
 
 function foundationChallenge(level) {
   const evidenceStep = level.control.kind === "reveal"
     ? `<div class="control-step" data-control-step>
-      <p class="step-label">第二步｜啟動機關並取得證據</p>
+      <p class="step-label">讓石臂動起來</p>
       <p class="question">顯示前臂繞肘關節轉動的物理證據。</p>
       <input id="level-control" type="hidden" value="${level.control.target}" data-control>
       <button type="button" class="primary-button" data-run>顯示轉動證據</button>
     </div>`
     : `<div class="control-step" data-control-step>
-      <p class="step-label">第二步｜操作變因並取得證據</p>
+      <p class="step-label">調整機關，留下這次痕跡</p>
       <div class="slider-head"><span class="control-label">${level.control.label}</span><output data-readout>${formatControlValue(level.control.base)} ${level.control.unit}</output></div>
       ${controlMarkup(level.control)}
       <div class="live-observation" data-live-observation aria-live="polite">
@@ -240,18 +250,18 @@ function foundationChallenge(level) {
     </div>`;
   return `<section class="challenge-card">
     <div class="prediction-step">
-      <p class="step-label">第一步｜鎖定質性預測</p><p class="question">${level.prediction.question}</p>
+      <p class="step-label">先說你認為會發生什麼</p><p class="question">${level.prediction.question}</p>
       <div class="choices" data-predictions>${choiceButtons(level.prediction.options, "prediction")}</div>
-      <div class="action-row"><span class="attempts" data-attempts>尚未啟動機關</span><button type="button" class="primary-button" data-lock disabled>鎖定預測</button></div>
+      <div class="action-row"><span class="attempts" data-attempts>尚未啟動機關</span><button type="button" class="primary-button" data-lock disabled>封存判斷</button></div>
     </div>
     <hr class="phase-divider">
     ${evidenceStep}
     <div class="reason-step" data-reason-step>
-      <hr class="phase-divider"><p class="step-label">第三步｜用證據選出理由</p><p class="question">${level.reason.question}</p>
+      <hr class="phase-divider"><p class="step-label">把剛才看見的事說清楚</p><p class="question">${level.reason.question}</p>
       <div class="choices" data-reasons>${choiceButtons(level.reason.options, "reason")}</div>
       <button type="button" class="primary-button" data-submit-reason disabled>提交解釋</button>
     </div>
-    <div class="feedback" data-feedback aria-live="polite">先鎖定預測；結果不會在預測前顯示。</div>
+    <div class="feedback" data-feedback aria-live="polite">先封存你的判斷；機關結果會在啟動後顯示。</div>
   </section>`;
 }
 
@@ -312,10 +322,10 @@ function liveObservation(level, value) {
 
 function advancedChallenge(level) {
   return `<section class="challenge-card">
-    <p class="step-label">第一步｜辨認物理模型</p><p class="question">哪一個模型適用於這道機關？</p>
+    <p class="step-label">選一條能讓機關成立的法則</p><p class="question">哪一個模型適用於這道機關？</p>
     <div class="choices model-choices" data-models>${choiceButtons(level.models, "model")}</div>
     <div class="calculation-step" data-calculation-step>
-      <hr class="phase-divider"><p class="step-label">第二步｜計算並啟動模擬</p>
+      <hr class="phase-divider"><p class="step-label">把你的數值刻入機關</p>
       <div class="number-grid">${level.inputs.map(field => `<label class="number-field">${field.label}<div><input data-answer="${field.id}" type="number" inputmode="decimal" step="any" aria-label="${field.label}"><span>${field.unit}</span></div></label>`).join("")}</div>
       <div class="action-row"><span class="attempts" data-attempts>尚未驗證</span><button type="button" class="primary-button" data-verify>驗證模型</button></div>
     </div>
@@ -345,17 +355,24 @@ function bindFoundation(level, index) {
   }));
   lock.addEventListener("click", () => {
     sound("lock");
-    lock.textContent = "預測已鎖定";
+    lock.textContent = "判斷已封存";
     lock.disabled = true;
     main.querySelectorAll("[data-prediction]").forEach(button => { button.disabled = true; });
+    episodeTrace.comparisonPlan = {
+      claim: level.assessedClaim,
+      predictedDirection: selectedPrediction,
+      controlledQuantity: level.control.label,
+      conditionSet: [level.control.base, level.control.target]
+    };
+    episodeTrace.status = "plan-locked";
     controlStep.classList.add("visible");
     if (level.control.kind !== "reveal") {
       updateLiveObservation(level, Number(controlInput.value));
-      drawVisual(level, { value: Number(controlInput.value), revealed: false, preview: true });
+      drawVisual(level, { value: Number(controlInput.value), phase: "preview" });
     }
     feedback.textContent = level.control.kind === "reveal"
-      ? "預測已鎖定。請顯示轉動證據。"
-      : `預測已鎖定。請把${level.control.label}調到目標值，再啟動機關。`;
+      ? "判斷已封存。請顯示轉動證據。"
+      : `判斷已封存。請把${level.control.label}調到目標值，再啟動機關。`;
   });
   controlInput.addEventListener("input", () => {
     const readout = main.querySelector("[data-readout]");
@@ -363,6 +380,8 @@ function bindFoundation(level, index) {
     updateLiveObservation(level, Number(controlInput.value));
     if (evidenceValid) {
       evidenceValid = false;
+      episodeTrace.status = "stale";
+      if (episodeTrace.evidenceRun) episodeTrace.evidenceRun.supersededBy = `${level.code}:pending`;
       reasonStep.classList.remove("visible");
       selectedReason = null;
       feedback.className = "feedback";
@@ -371,7 +390,7 @@ function bindFoundation(level, index) {
       feedback.className = "feedback";
       feedback.textContent = "圖像已隨控制值即時更新；調到目標後啟動機關，鎖定這次證據。";
     }
-    drawVisual(level, { value: Number(controlInput.value), revealed: false, preview: true });
+    drawVisual(level, { value: Number(controlInput.value), phase: "preview" });
   });
   main.querySelectorAll("[data-control-option]").forEach(button => button.addEventListener("click", () => {
     sound("select");
@@ -393,11 +412,18 @@ function bindFoundation(level, index) {
       return;
     }
     evidenceValid = true;
+    episodeTrace.evidenceRun = {
+      version: `${level.code}:${attempts}`,
+      plan: episodeTrace.comparisonPlan,
+      condition: { [level.control.label]: value },
+      observable: physics.deriveEvidenceState(level, { value, phase: "evidence" })
+    };
+    episodeTrace.status = "evidence-recorded";
     sound("evidence");
-    drawVisual(level, { value, revealed: true });
+    drawVisual(level, { value, phase: "evidence" });
     reasonStep.classList.add("visible");
     feedback.className = "feedback";
-    feedback.textContent = selectedPrediction === level.prediction.correct ? "證據已出現，而且與你的預測一致。現在選出因果理由。" : "證據已出現，但和你的預測不同。仍請先根據證據判斷原因。";
+    feedback.textContent = selectedPrediction === level.prediction.correct ? "證據已出現，而且與你原先的判斷一致。現在選出因果理由。" : "證據已出現，但和你原先的判斷不同。仍請先根據證據判斷原因。";
   });
   main.querySelectorAll("[data-reason]").forEach(button => button.addEventListener("click", () => {
     sound("select");
@@ -415,7 +441,7 @@ function bindFoundation(level, index) {
     else {
       const damage = loseFlame(level);
       feedback.className = "feedback bad";
-      feedback.innerHTML = `<strong>機關尚未接受這條解釋。</strong><br>${predictionOK ? "預測正確；再比較三個理由與畫面證據。" : "預測和證據不一致；請重新進入本關修正整條因果鏈。"}<br>${damage}<br><button type="button" class="secondary-button next-button" data-retry>重新預測</button>`;
+      feedback.innerHTML = `<strong>機關尚未接受這條解釋。</strong><br>${predictionOK ? "原先判斷正確；再比較三個理由與畫面證據。" : "原先判斷和證據不一致；請重新進入本關修正整條因果鏈。"}<br>${damage}<br><button type="button" class="secondary-button next-button" data-retry>重新判斷</button>`;
       const session = stageSession();
       main.querySelector("[data-retry]").addEventListener("click", () => renderStage(level, index, session));
     }
@@ -432,6 +458,8 @@ function bindAdvanced(level, index) {
     selectedModel = button.dataset.model;
     selectOne("[data-model]", button);
     calculation.classList.add("visible");
+    episodeTrace.comparisonPlan = { claim: level.assessedClaim, selectedModel, requiredOutputs: level.inputs.map(field => field.id) };
+    episodeTrace.status = "plan-locked";
     if (evidenceValid) invalidateAdvanced(level, feedback);
     feedback.className = "feedback";
     feedback.textContent = "模型已選擇。輸入數值後再啟動驗證；修改數值會讓舊證據失效。";
@@ -439,7 +467,9 @@ function bindAdvanced(level, index) {
   main.querySelectorAll("[data-answer]").forEach(input => input.addEventListener("input", () => {
     if (evidenceValid) {
       evidenceValid = false;
-      drawVisual(level, { revealed: false });
+      episodeTrace.status = "stale";
+      if (episodeTrace.evidenceRun) episodeTrace.evidenceRun.supersededBy = `${level.code}:pending`;
+      drawVisual(level, { phase: "pre-plan" });
       feedback.className = "feedback";
       feedback.textContent = "數值已改變，舊證據已失效。請重新驗證模型。";
     }
@@ -452,8 +482,15 @@ function bindAdvanced(level, index) {
     const modelOK = selectedModel === level.correctModel;
     const valuesOK = results.every(result => result.ok);
     evidenceValid = true;
+    episodeTrace.evidenceRun = {
+      version: `${level.code}:${attempts}`,
+      plan: episodeTrace.comparisonPlan,
+      condition: values,
+      observable: physics.deriveEvidenceState(level, { phase: "evidence", values, modelOK, valuesOK })
+    };
+    episodeTrace.status = modelOK && valuesOK ? "supported" : "contradicted";
     sound("evidence");
-    drawVisual(level, { revealed: true, values, modelOK, valuesOK });
+    drawVisual(level, { phase: "evidence", values, modelOK, valuesOK });
     markChoice("model", level.correctModel);
     if (modelOK && valuesOK) completeLevel(level, index, feedback);
     else {
@@ -497,7 +534,7 @@ function completeLevel(level, index, feedback) {
     profile.xp += reward;
     profile.streak = mistakes === 0 && !usedHint ? profile.streak + 1 : 0;
     profile.bestStreak = Math.max(profile.bestStreak, profile.streak);
-    profile.levels[level.code] = { mistakes, usedHint, rewinds, reward };
+    profile.levels[level.code] = { mistakes, usedHint, rewinds, reward, episodeTrace };
     const foundationDone = temple.tracks.foundation.every(item => readProgress("foundation").has(item.code));
     const advancedDone = temple.tracks.advanced.every(item => readProgress("advanced").has(item.code));
     if (foundationDone && advancedDone && !profile.relics.includes(temple.id)) profile.relics.push(temple.id);
@@ -521,24 +558,26 @@ function drawVisual(level, state) {
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  const value = Number(state.value ?? level.control?.base ?? 0);
-  const revealed = Boolean(state.revealed);
-  const preview = Boolean(state.preview);
-  drawBasePlate(ctx, w, h, revealed ? "證據已鎖定" : preview ? "即時預覽中" : "預測待鎖定");
+  const evidence = physics.deriveEvidenceState(level, state);
+  canvas.setAttribute?.("aria-label", evidence.phase === "pre-plan" ? `${level.title}的機關尚未啟動；${level.assessedClaim}` : evidence.phase === "preview" ? `${level.title}的可操作預覽；尚未封存正式證據` : `${level.title}的本次正式證據；${level.assessedClaim}`);
+  const value = evidence.value;
+  const revealed = evidence.phase === "evidence";
+  const preview = evidence.phase === "preview";
+  drawBasePlate(ctx, w, h, revealed ? "本次痕跡已封存" : preview ? "機關調整中" : "機關尚未啟動");
   const type = level.visual;
-  if (type.startsWith("wave-")) drawWaveVisual(ctx, type, value, revealed, w, h);
-  else if (type.startsWith("photo-")) drawPhotoVisual(ctx, type, value, revealed, w, h);
+  if (type.startsWith("wave-")) drawWaveVisual(ctx, type, value, revealed, w, h, evidence);
+  else if (type.startsWith("photo-")) drawPhotoVisual(ctx, type, value, revealed, w, h, evidence);
   else if (type.startsWith("measure-") || type.startsWith("uncertainty-")) drawMeasureVisual(ctx, type, value, revealed, w, h);
   else if (type.startsWith("xt-") || type.startsWith("chase") || type.startsWith("brake") || type.startsWith("chrono-")) drawChronoVisual(ctx, type, value, revealed, w, h);
-  else if (["momentum-","energy-","electric-","magnetic-","optics-","thermal-","celestial-","newton-","resonance-","emwave-","quantum-","nuclear-"].some(prefix => type.startsWith(prefix))) drawExpansionVisual(ctx, type, value, revealed, w, h);
-  else drawTitanVisual(ctx, type, value, revealed, w, h);
+  else if (["momentum-","energy-","electric-","magnetic-","optics-","thermal-","celestial-","newton-","resonance-","emwave-","quantum-","nuclear-"].some(prefix => type.startsWith(prefix))) drawExpansionVisual(ctx, type, value, revealed, w, h, evidence);
+  else drawTitanVisual(ctx, type, value, revealed, w, h, evidence);
   ctx.restore();
 }
 
 function drawBasePlate(ctx, w, h, revealed) {
   ctx.fillStyle = "rgba(5,10,17,.52)";
   ctx.fillRect(26, 28, 300, 50);
-  ctx.fillStyle = revealed === "證據已鎖定" ? "#8fffd4" : revealed === "即時預覽中" ? "#ffdc8b" : "#d2d9e4";
+  ctx.fillStyle = revealed === "本次痕跡已封存" ? "#8fffd4" : revealed === "機關調整中" ? "#ffdc8b" : "#d2d9e4";
   ctx.font = "800 20px system-ui";
   ctx.fillText(revealed, 46, 60);
 }
@@ -564,16 +603,18 @@ function forceArrow(ctx, tailX, tailY, headX, headY, color, text) {
   arrow(ctx, tailX, tailY, headX, headY, color, text);
 }
 
-function drawTitanVisual(ctx, type, value, revealed) {
+function drawTitanVisual(ctx, type, value, revealed, w, h, evidence) {
   const pivotX = 350, pivotY = 385;
   if (type === "triceps") {
     const ballX = 460, ballY = 195;
     ctx.strokeStyle = "rgba(255,255,255,.75)"; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(pivotX,pivotY); ctx.lineTo(ballX,ballY); ctx.stroke();
     dot(ctx,pivotX,pivotY,"#ffd86f",13); dot(ctx,ballX,ballY,"#d9c79d",22);
-    forceArrow(ctx,ballX,ballY,ballX,ballY+50,"#ff766c","石球 100 N");
+    const weight = evidence.values.weight;
+    forceArrow(ctx,ballX,ballY,ballX,ballY+50,"#ff766c",revealed && Number.isFinite(weight)?`石球 ${formatControlValue(weight)} N`:"石球重力 W");
     forceArrow(ctx,pivotX-20,pivotY+15,pivotX-155,pivotY+80,"#55e2db","三頭肌 300 N");
     ctx.strokeStyle="#ffd86f";ctx.lineWidth=5;ctx.setLineDash([10,8]);ctx.beginPath();ctx.arc(pivotX,pivotY,86,-Math.PI/3,Math.PI/2);ctx.stroke();ctx.setLineDash([]);
     label(ctx,"θ = 150°",420,365,"#ffdc8b",22);
+    if(revealed && Number.isFinite(weight))evidenceCaption(ctx,`你的輸入 W = ${formatControlValue(weight)} N；畫面與計算使用同一份數值`);
   } else if (type === "pivot") {
     const elbowX=300,elbowY=360,insertionX=390,insertionY=350,handX=720,handY=340,ballX=720,ballY=180;
     ctx.strokeStyle="rgba(255,255,255,.78)";ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(elbowX,elbowY);ctx.lineTo(handX,handY);ctx.stroke();
@@ -618,28 +659,33 @@ function drawTitanVisual(ctx, type, value, revealed) {
     const elbowX=280,elbowY=360,handX=720,handY=345;
     ctx.strokeStyle="rgba(255,255,255,.78)";ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(elbowX,elbowY);ctx.lineTo(handX,handY);ctx.stroke();
     dot(ctx,elbowX,elbowY,"#ffd86f",14);label(ctx,"肘支點",235,420,"#ffdc8b",18);dot(ctx,handX,handY-35,"#d9c79d",30);
-    forceArrow(ctx,360,357,318,213,"#55e2db","二頭肌 300 N");
+    const force = evidence.values.force;
+    const muscleLength = revealed && Number.isFinite(force) ? Math.max(30,Math.min(160,force*.48)) : 90;
+    forceArrow(ctx,360,357,360-muscleLength*.28,357-muscleLength*.96,"#55e2db",revealed&&Number.isFinite(force)?`二頭肌 ${formatControlValue(force)} N`:"二頭肌拉力 F");
     forceArrow(ctx,handX,handY-35,handX,handY-10,"#ff766c","石球 50 N");
-    label(ctx,"同圖箭長比例 300:50 = 6:1",520,485,"#dbe3ef",17);
-    if(revealed)evidenceCaption(ctx,"箭尾在施力點；二頭肌小力臂需較大拉力才能平衡");
+    if(revealed&&Number.isFinite(force))label(ctx,`同一比例尺：${formatControlValue(force)} N 與 50 N`,515,485,"#dbe3ef",17);
+    if(revealed)evidenceCaption(ctx,"箭尾在施力點；箭頭給方向；同圖箭長按輸入力大小繪製");
   } else if (type === "deadlift") {
     const hipX=260,hipY=400,torsoX=500,torsoY=285,loadX=760,loadY=350;
     ctx.strokeStyle="rgba(255,255,255,.78)";ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(hipX,hipY);ctx.lineTo(640,225);ctx.lineTo(loadX,loadY);ctx.stroke();
     dot(ctx,hipX,hipY,"#ffd86f",14);label(ctx,"髖支點",205,455,"#ffdc8b",18);
     forceArrow(ctx,torsoX,torsoY,torsoX,torsoY+24,"#ff9b79","上半身 300 N");
-    forceArrow(ctx,loadX,loadY,loadX,loadY+10,"#ff766c","石球 100 N");
+    const weight = evidence.values.weight;
+    forceArrow(ctx,loadX,loadY,loadX,loadY+Math.max(12,Math.min(80,(Number.isFinite(weight)?weight:100)*.25)),"#ff766c",revealed&&Number.isFinite(weight)?`石球 ${formatControlValue(weight)} N`:"石球重力 W");
     forceArrow(ctx,305,376,160,250,"#55e2db","髖伸肌 2250 N");
-    label(ctx,"箭長使用同一比例尺；肌肉力遠大於外力",450,485,"#dbe3ef",17);
+    if(revealed)label(ctx,"箭長使用同一比例尺；畫面採玩家輸入的石球重力",390,485,"#dbe3ef",17);
     if(revealed)evidenceCaption(ctx,"髖伸肌力矩 = 上半身力矩 + 石球力矩");
   } else if (type === "achilles") {
     const heelX=300,ankleX=470,toeX=760,footY=365;
     ctx.strokeStyle="rgba(255,255,255,.8)";ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(heelX,footY);ctx.lineTo(toeX,footY);ctx.stroke();
     dot(ctx,ankleX,footY,"#ffd86f",14);label(ctx,"踝關節支點",405,420,"#ffdc8b",18);
     forceArrow(ctx,heelX,footY,heelX,185,"#55e2db","阿基里斯腱 3000 N");
-    forceArrow(ctx,toeX,footY,toeX,305,"#ff9b79","前腳掌正向力 1000 N");
+    const normal = evidence.values.normal;
+    const normalLength = revealed&&Number.isFinite(normal)?Math.max(30,Math.min(180,normal*.06)):70;
+    forceArrow(ctx,toeX,footY,toeX,footY-normalLength,"#ff9b79",revealed&&Number.isFinite(normal)?`前腳掌正向力 ${formatControlValue(normal)} N`:"前腳掌正向力 N");
     ctx.strokeStyle="#ffd86f";ctx.lineWidth=4;ctx.setLineDash([9,7]);ctx.beginPath();ctx.moveTo(heelX,455);ctx.lineTo(ankleX,455);ctx.moveTo(ankleX,485);ctx.lineTo(toeX,485);ctx.stroke();ctx.setLineDash([]);
     label(ctx,"5 cm 等效力臂",315,450,"#ffdc8b",16);label(ctx,"15 cm",590,480,"#ffdc8b",16);
-    if(revealed)evidenceCaption(ctx,"取踝關節力矩：3000×5 = N×15，所以 N = 1000 N");
+    if(revealed&&Number.isFinite(normal))evidenceCaption(ctx,`取踝關節力矩檢查你的輸入：3000×5 與 ${formatControlValue(normal)}×15`);
   }
 }
 
@@ -683,68 +729,74 @@ function drawChronoVisual(ctx, type, value, revealed) {
   }
 }
 
-function drawPhotoVisual(ctx, type, value, revealed) {
+function drawPhotoVisual(ctx, type, value, revealed, w, h, evidence) {
   const left=160,right=835,axisY=345,scale=120;
   ctx.fillStyle="rgba(16,30,52,.84)";ctx.fillRect(110,120,780,340);
   ctx.strokeStyle="#dce6f2";ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(left,axisY);ctx.lineTo(right,axisY);ctx.stroke();
   label(ctx,"能量（eV）→",left,395,"#b7ccff",18);
-  const bar=(energy,color="#70a7ff")=>{ctx.fillStyle=color;ctx.fillRect(left,235,energy*scale,58);label(ctx,`Eγ = ${energy.toFixed(1)} eV`,left+10,272,"white",18);};
+  const bar=(energy,color="#70a7ff",text)=>{ctx.fillStyle=color;ctx.fillRect(left,235,energy*scale,58);if(text)label(ctx,text,left+10,272,"white",18);};
   const threshold=(energy,text,color="#f6bd4a")=>{const x=left+energy*scale;ctx.strokeStyle=color;ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(x,190);ctx.lineTo(x,365);ctx.stroke();label(ctx,text,x-38,175,color,17);};
+  if(!evidence.observed){
+    ctx.fillStyle="#70a7ff";ctx.fillRect(190,220,180,70);label(ctx,"待調整的光束",205,263,"white",18);
+    ctx.strokeStyle="#f6bd4a";ctx.lineWidth=6;ctx.strokeRect(650,205,115,115);label(ctx,"金屬光門",657,340,"#ffdc8b",17);
+    label(ctx,"先決定你的做法，光電子結果尚未出現",265,435,"#dbe3ef",19);
+    return;
+  }
   if(type === "photo-threshold") {
-    const energy=1.3*Number(value);bar(energy);threshold(3.5,"功函數 Φ");
+    const energy=1.3*Number(value);bar(energy,"#70a7ff",`光子能量：${formatControlValue(value)} 級`);threshold(3.5,"功函數 Φ");
     if(revealed)evidenceCaption(ctx,energy>=3.5?"Eγ ≥ Φ：單一光子已能放出電子":"Eγ < Φ：仍無光電子");
   } else if(type === "photo-intensity") {
-    bar(2.2);threshold(3.5,"功函數 Φ");const count=Math.max(1,Math.round(Number(value)*2));for(let i=0;i<count;i++)dot(ctx,185+i*42,430,"#8db6ff",7);
+    bar(2.2,"#70a7ff","每顆光子能量固定");threshold(3.5,"功函數 Φ");const count=Math.max(1,Math.round(Number(value)*2));for(let i=0;i<count;i++)dot(ctx,185+i*42,430,"#8db6ff",7);
     if(revealed)evidenceCaption(ctx,"強度只讓低能光子變多；每顆仍低於功函數");
   } else if(type === "photo-metal") {
-    const selected=Math.round(Number(value));bar(3.2);threshold(2.4,selected===1?"ΦA｜本次測試":"ΦA","#65ded2");threshold(4.0,selected===2?"ΦB｜本次測試":"ΦB","#ff8f86");
+    const selected=Math.round(Number(value));bar(3.2,"#70a7ff","同一束入射光");threshold(2.4,selected===1?"ΦA｜本次測試":"ΦA","#65ded2");threshold(4.0,selected===2?"ΦB｜本次測試":"ΦB","#ff8f86");
     label(ctx,selected===1?"金屬 A：Eγ > ΦA，放出電子":"金屬 B：Eγ < ΦB，沒有電子",285,445,selected===1?"#a1fff5":"#ffb6ac",19);
     if(revealed)evidenceCaption(ctx,"ΦA < Eγ < ΦB：A 放出電子，B 不會");
   } else if(type === "photo-budget") {
-    const energy=1.05*Number(value);bar(energy);threshold(2.2,"門 1");threshold(3.2,"門 2");threshold(4.2,"門 3");
+    const energy=1.05*Number(value);bar(energy,"#70a7ff",`頻率設定 ${formatControlValue(value)} 級`);threshold(2.2,"門 1");threshold(3.2,"門 2");threshold(4.2,"門 3");
     if(revealed)evidenceCaption(ctx,"先讓 Eγ 剛越過目標門檻，再以強度控制電子數");
   } else if(type === "photo-energy") {
-    bar(3.1);if(revealed)evidenceCaption(ctx,"400 nm 光子：E = hc/λ ≈ 3.10 eV");
+    const energy=evidence.values.energy;if(Number.isFinite(energy))bar(energy,"#70a7ff",`你的光子能量 ${formatControlValue(energy)} eV`);if(revealed&&Number.isFinite(energy))evidenceCaption(ctx,"畫面長度直接取自你的 E=hc/λ 計算結果");
   } else if(type === "photo-kmax") {
-    bar(3.5);threshold(2.3,"功函數 Φ");if(revealed)evidenceCaption(ctx,"剩餘能量成為最大動能：3.5 − 2.3 = 1.2 eV");
+    const kmax=evidence.values.kmax;bar(3.5,"#70a7ff","已知 Eγ = 3.5 eV");threshold(2.3,"功函數 Φ");if(Number.isFinite(kmax)){ctx.fillStyle="#65ded2";ctx.fillRect(left,420,kmax*scale,22);label(ctx,`你的 Kmax = ${formatControlValue(kmax)} eV`,left,470,"#a1fff5",18);}if(revealed)evidenceCaption(ctx,"綠條由你的 Kmax 輸入生成，不預先代入答案");
   } else if(type === "photo-voltage") {
-    bar(1.4);if(revealed)evidenceCaption(ctx,"Kmax = 1.4 eV 對應截止電壓 1.4 V");
+    const voltage=evidence.values.voltage;bar(1.4,"#70a7ff","已知 Kmax = 1.4 eV");if(Number.isFinite(voltage)){threshold(voltage,`你的反向電壓 ${formatControlValue(voltage)} V`,"#ff8f86");}if(revealed)evidenceCaption(ctx,"反向電壓位置由你的輸入生成");
   } else {
-    bar(2.5);for(let i=0;i<10;i++)dot(ctx,190+i*48,425,"#8db6ff",7);if(revealed)evidenceCaption(ctx,"光子數 × 量子效率：有效電子數 100 顆");
+    const electrons=evidence.values.electrons;bar(2.5,"#70a7ff","20 W × 2 s");if(Number.isFinite(electrons)){const count=Math.max(1,Math.min(20,Math.round(electrons/10)));for(let i=0;i<count;i++)dot(ctx,190+i*32,425,"#8db6ff",7);label(ctx,`你的有效電子數：${formatControlValue(electrons)}`,525,430,"#a1fff5",18);}if(revealed)evidenceCaption(ctx,"電子點數依玩家輸入縮放，沒有預存正解畫面");
   }
 }
 
-function drawWaveVisual(ctx, type, value, revealed, w, h) {
-  const cx=w/2,cy=h/2+30;
-  if (type === "wave-two-source" || type === "wave-separation" || type === "wave-phase" || type === "wave-lines" || type === "wave-inverse") {
-    if(type === "wave-two-source" && Number(value) === 1) {
-      dot(ctx,cx,cy,"#78f5ec",10);ctx.strokeStyle="rgba(130,255,243,.55)";ctx.lineWidth=3;for(let r=35;r<245;r+=35){ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();}
-      if(revealed)evidenceCaption(ctx,"一個波源只有向外傳播的同心波紋");
-      return;
-    }
-    const sep = type === "wave-separation" ? Number(value)*25 : 180;
-    const x1=cx-sep/2,x2=cx+sep/2;dot(ctx,x1,cy,"#78f5ec",10);dot(ctx,x2,cy,"#78f5ec",10);
-    ctx.strokeStyle="rgba(130,255,243,.25)";ctx.lineWidth=2;for(let r=35;r<230;r+=35){ctx.beginPath();ctx.arc(x1,cy,r,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(x2,cy,r,0,Math.PI*2);ctx.stroke();}
-    if (revealed) {
-      if(type === "wave-lines") {
-        for(let i=-3;i<=3;i++){ctx.strokeStyle="rgba(100,238,218,.86)";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(cx+i*48,cy-250);ctx.quadraticCurveTo(cx+i*18,cy,cx+i*48,cy+225);ctx.stroke();}
-        for(let i=-3;i<=2;i++){ctx.strokeStyle="rgba(255,143,134,.78)";ctx.lineWidth=3;ctx.setLineDash([9,8]);const dx=(i+.5)*48;ctx.beginPath();ctx.moveTo(cx+dx,cy-245);ctx.quadraticCurveTo(cx+dx*.38,cy,cx+dx,cy+220);ctx.stroke();}ctx.setLineDash([]);
-        evidenceCaption(ctx,"同相且 d=3.2λ：腹線 7 條（綠）、節線 6 條（紅虛線）");
-      } else if(type === "wave-inverse") {
-        ctx.strokeStyle="rgba(255,143,134,.85)";ctx.lineWidth=5;ctx.setLineDash([10,8]);ctx.beginPath();ctx.moveTo(cx,cy-250);ctx.lineTo(cx,cy+225);ctx.stroke();ctx.setLineDash([]);evidenceCaption(ctx,"中央等程差卻為節線：兩波源反相 180°");
-      } else {
-        const count=Math.max(2,Math.round(sep/60));ctx.strokeStyle="rgba(130,255,243,.75)";ctx.lineWidth=4;for(let i=-count;i<=count;i++){ctx.beginPath();ctx.moveTo(cx+i*34,cy-245);ctx.quadraticCurveTo(cx+i*12,cy,cx+i*34,cy+220);ctx.stroke();}
-        evidenceCaption(ctx,type === "wave-phase"?"Δr=1.5λ → 相位差 540° ≡ 180°：破壞性干涉":"波源間距增加：可容納的節線／腹線階數增加");
-      }
-    } else label(ctx,"兩個波源｜干涉證據尚未顯示",340,500,"#d6deea",19);
-  } else {
-    dot(ctx,cx,cy,"#78f5ec",11);
-    const gap = type === "wave-frequency" ? Math.max(24,100/Math.max(1,Number(value))) : 45;
-    const alpha = type === "wave-amplitude" ? Math.min(.95,.3+Number(value)*.2) : .6;
-    ctx.strokeStyle=`rgba(116,245,235,${alpha})`;ctx.lineWidth=type === "wave-amplitude"?Math.max(3,Number(value)*2):3;
-    for(let r=gap;r<260;r+=gap){ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();}
-    if(revealed) label(ctx,type === "wave-frequency"?"頻率 ↑　波長 ↓　條紋變密":type === "wave-amplitude"?"振幅 ↑　對比增強，間距不變":"v = fλ 的圖像證據",330,510,"#a1fff5",21);
+function drawWaveVisual(ctx, type, value, revealed, w, h, evidence) {
+  const cx=w/2,cy=h/2+18,wave=evidence.wave;
+  ctx.fillStyle="rgba(6,31,48,.72)";ctx.fillRect(90,105,w-180,h-155);
+  if(!wave.observed){
+    const sourceCount=type === "wave-frequency" || type === "wave-amplitude" || (type === "wave-two-source" && Number(value) === 1)?1:2;
+    for(let i=0;i<sourceCount;i++)dot(ctx,cx+(i-(sourceCount-1)/2)*150,cy,"#78f5ec",12);
+    label(ctx,sourceCount===1?"沉睡的水眼":"兩座沉睡的水眼",sourceCount===1?430:405,cy+70,"#a1fff5",19);
+    label(ctx,"先決定要怎麼喚醒它；波紋結果尚未出現",285,485,"#d6deea",19);
+    return;
   }
+  const plot={x:120,y:125,width:760,height:335},cols=76,rows=34,cellW=plot.width/cols,cellH=plot.height/rows;
+  const spanX=36,spanY=16;
+  for(let row=0;row<rows;row++){
+    const py=-spanY/2+(row+.5)*spanY/rows;
+    for(let col=0;col<cols;col++){
+      const px=-spanX/2+(col+.5)*spanX/cols;
+      const intensity=wave.sources===1?physics.singleWaveAt(px,py,wave.params):physics.interferenceAt(px,py,wave.params);
+      const contrast=Math.max(.12,Math.min(1,wave.amplitude/3));
+      const light=Math.round(18+intensity*58*contrast);
+      ctx.fillStyle=`hsl(${185+Math.round(intensity*18)} 70% ${light}%)`;
+      ctx.fillRect(plot.x+col*cellW,plot.y+row*cellH,cellW+1,cellH+1);
+    }
+  }
+  const sourcePx=separation=>separation/spanX*plot.width;
+  const half=wave.sources===2?sourcePx(wave.params.separation)/2:0;
+  dot(ctx,cx-half,cy,"#fff0a6",9);if(wave.sources===2)dot(ctx,cx+half,cy,"#fff0a6",9);
+  label(ctx,`f=${formatControlValue(wave.params.frequency)} Hz　λ=${formatControlValue(wave.observable.wavelength)}`,135,112,"#a1fff5",17);
+  if(type === "wave-lines" && wave.observable.lineCounts) label(ctx,`腹線 ${wave.observable.lineCounts.antinodes}｜節線 ${wave.observable.lineCounts.nodes}`,655,112,"#ffdc8b",17);
+  else if(type === "wave-inverse" || type === "wave-phase") label(ctx,`中央強度 ${wave.observable.centerIntensity.toFixed(2)}｜相位 ${formatControlValue(wave.params.phase)}°`,570,112,"#ffdc8b",17);
+  else label(ctx,wave.sources===1?"單源波場":"雙源干涉場",748,112,"#ffdc8b",17);
+  if(revealed)evidenceCaption(ctx,type === "wave-frequency"?"波速固定時，模型以 λ=v/f 生成條紋間距":type === "wave-amplitude"?"只改振幅，模型中的 λ 不變":type === "wave-separation"?"只改源距，波長保持不變":type === "wave-lines"?"節腹線數由 d/λ 計算，背景波場也用同一組參數":"畫面每格由兩源程差與相位直接計算");
 }
 
 function drawMeasureVisual(ctx, type, value, revealed) {
@@ -771,15 +823,15 @@ function drawMeasureVisual(ctx, type, value, revealed) {
   }
 }
 
-function drawExpansionVisual(ctx, type, value, revealed, w, h) {
+function drawExpansionVisual(ctx, type, value, revealed, w, h, evidence) {
   ctx.fillStyle = "rgba(7,14,24,.58)";
   ctx.fillRect(90, 105, w - 180, h - 155);
   const family = type.split("-")[0];
   if (family === "momentum") drawMomentumEvidence(ctx, type, value, revealed);
   else if (family === "energy") drawEnergyEvidence(ctx, type, value, revealed);
   else if (family === "electric") drawElectricEvidence(ctx, type, value, revealed);
-  else if (family === "magnetic") drawMagneticEvidence(ctx, type, value, revealed);
-  else if (family === "optics") drawOpticsEvidence(ctx, type, value, revealed);
+  else if (family === "magnetic") drawMagneticEvidence(ctx, type, value, revealed, evidence);
+  else if (family === "optics") drawOpticsEvidence(ctx, type, value, revealed, evidence);
   else if (family === "thermal") drawThermalEvidence(ctx, type, value, revealed);
   else if (family === "celestial") drawCelestialEvidence(ctx, type, value, revealed);
   else if (family === "newton") drawNewtonEvidence(ctx, type, value, revealed);
@@ -881,67 +933,69 @@ function drawElectricEvidence(ctx, type, value, revealed) {
   if(revealed)evidenceCaption(ctx,type.includes("force")?"同號電荷：兩力等大反向，大小 0.60 N":"兩力箭尾各在受力電荷上：同號相斥、異號相吸");
 }
 
-function drawMagneticEvidence(ctx, type, value, revealed) {
+function drawMagneticEvidence(ctx, type, value, revealed, evidence) {
+  const observed=evidence.observed;
   if (type.includes("poles")) {
     ctx.fillStyle="#ff806b";ctx.fillRect(220,260,220,90);ctx.fillStyle=Number(value)===2?"#ff806b":"#84a7ff";ctx.fillRect(560,260,220,90);label(ctx,"N",370,317,"white",30);label(ctx,Number(value)===2?"N":"S",580,317,"white",30);
-    if(Number(value)===2){forceArrow(ctx,440,305,335,305,"#65ded2","");forceArrow(ctx,560,305,665,305,"#65ded2","");}
-    else{forceArrow(ctx,440,305,500,305,"#65ded2","");forceArrow(ctx,560,305,500,305,"#65ded2","");}
+    if(observed&&Number(value)===2){forceArrow(ctx,440,305,335,305,"#65ded2","");forceArrow(ctx,560,305,665,305,"#65ded2","");}
+    else if(observed){forceArrow(ctx,440,305,500,305,"#65ded2","");forceArrow(ctx,560,305,500,305,"#65ded2","");}
     if(revealed)evidenceCaption(ctx,"箭尾在各磁柱受力處：同名磁極相斥、異名相吸");
     return;
   }
   if(type.includes("induction")||type.includes("emf")) {
     const speed=type.includes("calc")?3:Math.max(1,Number(value)),speedLength=65+speed*35;
-    ctx.fillStyle="#ff806b";ctx.fillRect(180,250,150,100);label(ctx,"N",270,315,"white",28);arrow(ctx,330,300,330+speedLength,300,"#ffd36d","磁石速度");
+    ctx.fillStyle="#ff806b";ctx.fillRect(180,250,150,100);label(ctx,"N",270,315,"white",28);if(observed)arrow(ctx,330,300,330+speedLength,300,"#ffd36d","磁石速度");
     ctx.strokeStyle="#8e8bff";ctx.lineWidth=8;for(let i=0;i<5;i++){ctx.beginPath();ctx.ellipse(650,300,60+i*16,130,0,0,Math.PI*2);ctx.stroke();}
-    if(!type.includes("calc")){ctx.fillStyle="#65ded2";ctx.fillRect(805,430,30,-speed*55);label(ctx,"感應電動勢",735,465,"#a1fff5",16);}
+    if(observed&&!type.includes("calc")){ctx.fillStyle="#65ded2";ctx.fillRect(805,430,30,-speed*55);label(ctx,"感應電動勢",735,465,"#a1fff5",16);}
     if(revealed)evidenceCaption(ctx,type.includes("calc")?"|ε| = N|ΔΦ|/Δt = 12 V":"相同磁通改變量用時越短，感應電動勢越大");
     return;
   }
   for(let y=170;y<=420;y+=55) for(let x=210;x<=790;x+=65) label(ctx,"×",x,y,"rgba(105,219,203,.65)",25);
   if (type.includes("wire")) {
     const direction=type.includes("calc")?1:Number(value),tailX=direction>=0?280:720,headX=direction>=0?720:280,forceUp=direction>=0;
-    ctx.strokeStyle="#ffd36d";ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(250,330);ctx.lineTo(750,330);ctx.stroke();arrow(ctx,tailX,330,headX,330,"#ffd36d","I");forceArrow(ctx,500,330,500,forceUp?185:455,"#ff806b","F");
+    ctx.strokeStyle="#ffd36d";ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(250,330);ctx.lineTo(750,330);ctx.stroke();arrow(ctx,tailX,330,headX,330,"#ffd36d","I");if(observed)forceArrow(ctx,500,330,500,forceUp?185:455,"#ff806b","F");
     if(revealed)evidenceCaption(ctx,type.includes("calc")?"F = BIL = 0.60 N；箭尾在導線受力處":"I 反向時，I L×B 的方向也反向");
     return;
   }
-  const px=300,py=360,forceLength=type.includes("calc")||type.includes("radius")?130:55+Number(value)*22;dot(ctx,px,py,"#ffdc8b",15);arrow(ctx,px,py,px+170,py,"#ffbf5c","v");forceArrow(ctx,px,py,px,py-forceLength,"#ff806b","F_B");
-  ctx.strokeStyle="#73c8ff";ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(px,py);ctx.quadraticCurveTo(560,py-forceLength*.18,760,285-forceLength*.72);ctx.stroke();
+  const px=300,py=360,answerKey=type.includes("radius")?"radius":"force",entered=evidence.values[answerKey],domain=evidence.magnetic,domainRadius=domain?.trajectory.radius,forceMagnitude=domain?.force,forceLength=Math.max(45,Math.min(160,type.includes("calc")?forceMagnitude*3000:forceMagnitude*10));dot(ctx,px,py,"#ffdc8b",15);arrow(ctx,px,py,px+170,py,"#ffbf5c","v");if(observed)forceArrow(ctx,px,py,px,domain?.trajectory.direction==="down"?py+forceLength:py-forceLength,"#ff806b","F_B");
+  if(observed){const radiusPx=Math.max(90,Math.min(900,domainRadius*(type.includes("radius")?90:210)));ctx.strokeStyle="#73c8ff";ctx.lineWidth=7;ctx.beginPath();ctx.arc(px,domain?.trajectory.direction==="down"?py+radiusPx:py-radiusPx,radiusPx,domain?.trajectory.direction==="down"?-Math.PI/2:Math.PI/2,domain?.trajectory.direction==="down"?-.05:.05,domain?.trajectory.direction==="up");ctx.stroke();}
   if(revealed)evidenceCaption(ctx,type.includes("radius")?"磁力始終垂直速度並指向圓心：r = 3.0 m":type.includes("calc")?"q>0、v 向右、B 入紙面：F_B 向上，大小 0.030 N":"q>0、v 向右、B 入紙面：由 v×B 得磁力向上");
 }
 
-function drawOpticsEvidence(ctx, type, value, revealed) {
+function drawOpticsEvidence(ctx, type, value, revealed, evidence) {
+  const observed=evidence.observed;
   const interfaceY=315,normalX=500;
   const surface=()=>{ctx.strokeStyle="#d8e6f5";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(150,interfaceY);ctx.lineTo(850,interfaceY);ctx.stroke();ctx.setLineDash([10,8]);ctx.strokeStyle="#b8c5d5";ctx.beginPath();ctx.moveTo(normalX,135);ctx.lineTo(normalX,470);ctx.stroke();ctx.setLineDash([]);label(ctx,"法線",515,155,"#dce6f2",16);};
   if(type.includes("lens")||type.includes("magnify")) {
-    const lensX=500,axisY=315,f=type.includes("calc")?120:150,objectX=230,objectTop=205,parallelism=type.includes("calc")?3:Number(value),spread=(3-parallelism)*18;
+    const lensX=500,axisY=315,scale=9,f=type.includes("calc")?10*scale:150,objectX=230,objectTop=205,parallelism=type.includes("calc")?3:Number(value),spread=(3-parallelism)*18;
     ctx.strokeStyle="rgba(220,230,242,.5)";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(140,axisY);ctx.lineTo(860,axisY);ctx.stroke();
     ctx.strokeStyle="#b99cff";ctx.lineWidth=9;ctx.beginPath();ctx.ellipse(lensX,axisY,38,150,0,0,Math.PI*2);ctx.stroke();dot(ctx,lensX-f,axisY,"#ffdc8b",8);dot(ctx,lensX+f,axisY,"#ffdc8b",8);label(ctx,"F",lensX+f-6,axisY+35,"#ffdc8b",16);
     arrow(ctx,objectX,axisY,objectX,objectTop,"#ff806b","物體");
-    if(type.includes("magnify")||type.includes("calc")){arrow(ctx,objectX,objectTop,lensX,objectTop,"#ffd36d","");arrow(ctx,lensX,objectTop,lensX+250,axisY+(axisY-objectTop)*250/f,"#ffd36d","");arrow(ctx,objectX,objectTop,lensX,axisY,"#65ded2","");arrow(ctx,lensX,axisY,lensX+250,axisY+(axisY-objectTop)*250/(lensX-objectX),"#65ded2","");}
-    else{
+    if(observed&&(type.includes("magnify")||type.includes("calc"))){const imageX=lensX+Math.max(20,Math.min(300,Math.abs(evidence.optics.imageDistance)*scale)),imageY=axisY-(axisY-objectTop)*evidence.optics.magnification;arrow(ctx,objectX,objectTop,lensX,objectTop,"#ffd36d","");arrow(ctx,lensX,objectTop,imageX,imageY,"#ffd36d","");arrow(ctx,objectX,objectTop,lensX,axisY,"#65ded2","");arrow(ctx,lensX,axisY,imageX,imageY,"#65ded2","");arrow(ctx,imageX,axisY,imageX,imageY,"#ff806b","物理光路交會");if(Number.isFinite(evidence.optics.studentImageDistance)){const studentX=lensX+evidence.optics.studentImageDistance*scale;ctx.strokeStyle="#ff8f86";ctx.lineWidth=4;ctx.setLineDash([8,7]);ctx.beginPath();ctx.moveTo(studentX,190);ctx.lineTo(studentX,430);ctx.stroke();ctx.setLineDash([]);label(ctx,"你刻的位置",studentX-45,180,"#ffb6ac",16);}}
+    else if(observed){
       for(const offset of [-70,0,70]){const entryY=axisY+offset,entryStartY=entryY+spread*(offset/70||0);arrow(ctx,170,entryStartY,lensX,entryY,"#ffd36d","");arrow(ctx,lensX,entryY,lensX+250,axisY+(axisY-entryY)*250/f,"#65ded2","");}
       dot(ctx,lensX+f,axisY,"#ffdc8b",11);label(ctx,`平行度 ${parallelism} 級`,205,455,"#a1fff5",18);
     }
     if(revealed)evidenceCaption(ctx,type.includes("magnify")?"m = −di/do = −2：倒立、放大 2 倍":"平行主軸光折射後通過焦點；中央光線近似直行");return;
   }
   surface();
-  const calc=type.includes("calc"),incidence=calc?(type.includes("critical")?Math.asin(1/1.5)*180/Math.PI:30):type.includes("refraction")?45:Number(value);
+  const calc=type.includes("calc"),optics=evidence.optics,incidence=optics?.incidence ?? (type.includes("refraction")?45:Number(value));
   const theta1=Math.max(12,Math.min(75,incidence))*Math.PI/180,rayLen=235;
   arrow(ctx,normalX-Math.sin(theta1)*rayLen,interfaceY-Math.cos(theta1)*rayLen,normalX,interfaceY,"#ffbf5c","入射光");
   if(type.includes("reflection")) {
-    arrow(ctx,normalX,interfaceY,normalX+Math.sin(theta1)*rayLen,interfaceY-Math.cos(theta1)*rayLen,"#84a7ff","反射光");
+    if(observed)arrow(ctx,normalX,interfaceY,normalX+Math.sin(theta1)*rayLen,interfaceY-Math.cos(theta1)*rayLen,"#84a7ff","反射光");
     if(revealed)evidenceCaption(ctx,calc?"反射角等於入射角：30°":"角度都由法線量起；θr = θi");return;
   }
   const tir=type.includes("tir")||type.includes("critical");
   if(tir) {
-    const critical=Math.asin(1/1.5)*180/Math.PI,isCritical=calc,isTir=!calc&&incidence>critical;
-    if(isTir) arrow(ctx,normalX,interfaceY,normalX+Math.sin(theta1)*rayLen,interfaceY-Math.cos(theta1)*rayLen,"#84a7ff","全反射");
-    else if(isCritical) arrow(ctx,normalX,interfaceY,820,interfaceY,"#84a7ff","臨界折射光");
-    else arrow(ctx,normalX,interfaceY,normalX+Math.sin(Math.asin(1.5*Math.sin(theta1)))*190,interfaceY+Math.cos(Math.asin(1.5*Math.sin(theta1)))*190,"#84a7ff","折射光");
+    const critical=optics?.critical ?? physics.criticalAngle(1.5,1),isCritical=calc,isTir=!calc&&incidence>critical;
+    if(observed&&isTir) arrow(ctx,normalX,interfaceY,normalX+Math.sin(theta1)*rayLen,interfaceY-Math.cos(theta1)*rayLen,"#84a7ff","全反射");
+    else if(observed&&isCritical) arrow(ctx,normalX,interfaceY,820,interfaceY,"#84a7ff","臨界折射光");
+    else if(observed) arrow(ctx,normalX,interfaceY,normalX+Math.sin(Math.asin(1.5*Math.sin(theta1)))*190,interfaceY+Math.cos(Math.asin(1.5*Math.sin(theta1)))*190,"#84a7ff","折射光");
     if(revealed)evidenceCaption(ctx,isCritical?"θc = sin⁻¹(1/1.5) ≈ 41.8°；折射角為 90°":"由高 n 射向低 n 且 θi > θc：只剩反射光");return;
   }
-  const n2=calc?1.5:Number(value),theta2=Math.asin(Math.sin(theta1)/n2);
-  arrow(ctx,normalX,interfaceY,normalX+Math.sin(theta2)*rayLen,interfaceY+Math.cos(theta2)*rayLen,"#84a7ff","折射光");
+  const n2=calc?1.5:Number(value),theta2=(optics?.refraction ?? physics.snellAngle(1,n2,incidence))*Math.PI/180;
+  if(observed)arrow(ctx,normalX,interfaceY,normalX+Math.sin(theta2)*rayLen,interfaceY+Math.cos(theta2)*rayLen,"#84a7ff","折射光");
   if(revealed)evidenceCaption(ctx,calc?"sinθ₂ = sin30°/1.5 → θ₂ ≈ 19.5°":"進入較高折射率介質：折射角變小、光線偏向法線");
 }
 

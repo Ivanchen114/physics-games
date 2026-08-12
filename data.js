@@ -327,6 +327,137 @@
   };
   temples.forEach(temple => Object.assign(temple, lore[temple.id]));
 
+  const histories = {
+    titans:"十七世紀的博雷利把骨骼、關節與肌肉視為可以分析的槓桿；生物力學從此開始用力與力矩解釋人體動作。",
+    chrono:"伽利略以斜面減慢落體運動，讓位置與時間能被逐次記錄；運動不再只是印象，而成為可比較的軌跡。",
+    photo:"赫茲與雷納德看見光能釋出電子的異常，愛因斯坦在 1905 年以光量子與功函數解開頻率門檻。",
+    ripple:"楊氏用雙縫展示波的疊加與干涉；同一原理也會在兩個水波源之間留下節線與腹線。",
+    uncertainty:"現代計量把數值、解析度、重複量測與不確定度一起報告；承認界線，才讓不同實驗室的結果能真正比較。",
+    momentum:"惠更斯研究碰撞，逐步澄清系統在交互作用前後保留下來的運動量；短暫衝擊也能留下可追蹤的帳目。",
+    energy:"焦耳用攪拌水的實驗連結機械功與熱，促成能量守恆成為跨越力學與熱學的共同語言。",
+    electric:"伏打建立穩定電源，法拉第則用電力線描繪看不見的電作用；電路與場因此成為兩種互補視角。",
+    magnetic:"奧斯特發現電流會偏轉磁針，法拉第發現變動磁通能產生電流，電與磁從兩套現象逐漸合為同一系統。",
+    optics:"海什木以實驗研究視覺與光線，斯涅爾與後來的研究者再以角度關係整理折射，讓鏡城的路徑可以計算。",
+    thermal:"卡諾分析熱機，焦耳連結功與熱；熱力學因此同時追蹤能量傳遞、狀態改變與不可逆限制。",
+    celestial:"克卜勒從第谷資料找出行星軌道規律，牛頓再以同一引力連結落體與繞行，天地物理終於相遇。",
+    newton:"牛頓把慣性、合力與加速度寫成共同架構；力不是維持運動的原因，而是改變速度的原因。",
+    resonance:"伽利略注意到擺的節奏，後來的振動研究顯示：外力節奏接近固有頻率時，微小推動也能累積成大振幅。",
+    emwave:"馬克士威由電磁定律預言電磁波，赫茲再以火花實驗產生並偵測它；光因而被理解為電磁波的一部分。",
+    quantum:"普朗克提出能量量子，波耳以離散能階解釋原子光譜；微觀世界開始用機率與可觀測量重寫直覺。",
+    nuclear:"貝克勒與居禮夫婦研究放射性，拉塞福辨認原子核與衰變；核現象雖具隨機性，仍嚴格遵守守恆。"
+  };
+  temples.forEach(temple => { temple.history = histories[temple.id]; });
+
+  const curriculum = {
+    titans:{foundation:"必修 PEb-Ⅴc-5",advanced:"加深加廣選修 PEb-Ⅴa-15"},
+    chrono:{foundation:"必修 PEb-Ⅴc-1～4",advanced:"加深加廣選修 PEb-Ⅴa"},
+    photo:{foundation:"必修 PKd-Ⅴc-1～2",advanced:"加深加廣選修 PKd-Ⅴa-8"},
+    ripple:{foundation:"必修 PKa-Ⅴc-1、5",advanced:"必修 PKa-Ⅴc-6＋加深加廣選修"},
+    uncertainty:{foundation:"必修 PEa-Ⅴc-1～3",advanced:"加深加廣選修 PEa-Ⅴa-1"},
+    momentum:{foundation:"加深加廣選修 PEb-Ⅴa-10～12",advanced:"加深加廣選修 PEb-Ⅴa-10～12"},
+    energy:{foundation:"必修 PBa-Ⅴc-2",advanced:"加深加廣選修 PBa-Ⅴa"},
+    electric:{foundation:"必修 PKc-Ⅴc-1～2",advanced:"加深加廣選修 PKc-Ⅴa"},
+    magnetic:{foundation:"必修 PKc-Ⅴc-3",advanced:"加深加廣選修 PKc-Ⅴa-9"},
+    optics:{foundation:"必修 PKa-Ⅴc-3～4",advanced:"加深加廣選修 PKa-Ⅴa-13"},
+    thermal:{foundation:"必修 PBb-Ⅴc-1～2",advanced:"加深加廣選修 PBb-Ⅴa-3"},
+    celestial:{foundation:"必修 PEb-Ⅴc-3、PKb-Ⅴc-1～2",advanced:"加深加廣選修 PKb-Ⅴa"},
+    newton:{foundation:"必修 PEb-Ⅴc-2、4～5",advanced:"加深加廣選修 PEb-Ⅴa"},
+    resonance:{foundation:"必修 PKa-Ⅴc-1～2",advanced:"加深加廣選修 PKa-Ⅴa-7、9、13"},
+    emwave:{foundation:"必修 PKa-Ⅴc-7、PKc-Ⅴc-4～6",advanced:"加深加廣選修 PKc-Ⅴa-15"},
+    quantum:{foundation:"必修 PKd-Ⅴc-3～7",advanced:"加深加廣選修 PKd-Ⅴa-8"},
+    nuclear:{foundation:"必修 PKe-Ⅴc-1～3、PBa-Ⅴc-3～4",advanced:"加深加廣選修 PKe-Ⅴa-3；半衰期為跨科銜接"}
+  };
+  temples.forEach(temple => {
+    temple.curriculum = curriculum[temple.id];
+    for (const level of temple.tracks.foundation) {
+      level.assessedClaim = level.prediction.question;
+      level.modelId = `qualitative:${level.visual}`;
+      level.observableSchema = {
+        knownInputs: level.known,
+        manipulableInputs: [level.control.label],
+        previewOutputs: ["裝置狀態", "控制值"],
+        runObservables: ["本次機關的物理圖像"],
+        derivedAggregates: [level.reason.question],
+        conclusionLabels: level.prediction.options.map(item => item.value)
+      };
+      level.disclosureContract = {
+        prePlan: ["情境", "可直接觀察的原始資料", "可操控量"],
+        afterPlan: ["即時裝置預覽"],
+        afterRun: ["正式觀察結果", "因果理由"],
+        afterEvaluation: ["結論", "完整解釋"]
+      };
+      level.storyTeaser = `「${level.title}」機關把不同狀態的痕跡混在了一起。`;
+      level.storyProblem = `${temple.guardian}無法判定${level.control.label}改變後會發生什麼。你必須先押下一種可能，親手調整裝置，再用本次留下的痕跡修復${temple.relic}。`;
+      level.prePlanKnown = [...level.known];
+    }
+    for (const level of temple.tracks.advanced) {
+      level.assessedClaim = `${level.summary}｜${level.inputs.map(field => field.label).join("、")}`;
+      level.modelId = level.correctModel;
+      level.observableSchema = {
+        knownInputs: level.known,
+        manipulableInputs: level.inputs.map(field => field.label),
+        previewOutputs: ["裝置與已知量"],
+        runObservables: ["依玩家模型與輸入產生的圖像"],
+        derivedAggregates: level.inputs.map(field => field.label),
+        conclusionLabels: ["supported", "contradicted", "inconclusive"]
+      };
+      level.disclosureContract = {
+        prePlan: ["情境", "已知量", "候選模型"],
+        afterPlan: ["玩家選定的模型", "數值輸入"],
+        afterRun: ["由玩家模型與輸入導出的結果"],
+        afterEvaluation: ["模型判定", "完整推導"]
+      };
+      level.storyTeaser = `「${level.title}」刻印拒絕接受沒有模型支持的數值。`;
+      level.storyProblem = `${temple.guardian}只能提供裝置的已知量。選出能描述它們的法則，再刻入${level.inputs.map(field => field.label).join("與")}，讓${temple.relic}恢復穩定。`;
+      level.prePlanKnown = [...level.known];
+    }
+  });
+
+  // 這些欄位只負責第一次進關前的揭露層。結論、實驗結果與因果語句
+  // 必須等 comparisonPlan 鎖定並完成 evidenceRun 後才可出現。
+  const prePlanNarratives = {
+    "G-F1": ["石臂的三個關鍵位置被失序交換。", "守衛只認得三種槓桿角色；錯置任何一處，石臂都不會甦醒。", ["前臂托住石球", "圖中標出肘部、肌腱附著處與石球位置", "三個位置分別對應一種槓桿角色"]],
+    "G-F2": ["同一股推力必須選擇兩個位置之一。", "兩扇石門只有施力位置不同；你必須先押一扇，再讓機關顯示轉動痕跡。", ["兩次推力大小相同", "推力方向相同", "施力點距門軸分別為 10 cm 與 30 cm"]],
+    "G-F3": ["古代肌索能從不同方向拉動同一根前臂。", "力的大小與附著位置都被鎖定，只有拉力方向仍可調整。", ["力的大小固定", "施力點固定", "候選夾角為 15° 到 90°"]],
+    "G-F4": ["搬運長廊只允許巨人選一次持物距離。", "石球重量不變；你要在遠近兩種姿勢中選一種，避免神火過早耗盡。", ["石球重量相同", "石球可放在離髖 45 cm 或 15 cm 處", "髖伸肌群等效力臂固定為 5 cm"]],
+    "P-F1": ["金屬門前的光源可以改變節奏。", "門上的電子出口仍然沉睡；你只能改變光的頻率，再觀察能量刻度。", ["金屬種類固定", "光強度固定", "只改變照射頻率"]],
+    "P-F2": ["祭壇把紅光調得刺眼，出口仍沒有回應。", "頻率保持在門檻下方；你要判斷繼續增加光強是否值得。", ["金屬種類固定", "光的頻率低於已知門檻", "只提高光強度"]],
+    "P-F3": ["兩塊未知金屬等待同一束古光。", "先判斷哪種實驗結果能比較門檻，再啟動照射留下兩塊金屬的反應。", ["A、B 金屬接受相同頻率與強度", "兩塊金屬的反應尚未顯示", "只比較本次照射後是否逸出電子"]],
+    "P-F4": ["三道光門要共享一枚有限能源核心。", "每道門都有自己的門檻；你要先決定調整順序，再查看能源是否被有效使用。", ["三座金屬門檻不同", "可調整頻率與強度", "總能源有限"]],
+    "W-F1": ["水眼節奏失控，同心波紋正在重排。", "水速保持不變；你要先猜頻率改變後的紋路，再讓水眼留下新波形。", ["單一波源", "水波速度固定", "頻率可由 2 Hz 調到 4 Hz"]],
+    "W-F2": ["水眼的起伏力量可以獨立調整。", "頻率與水速都被鎖住；你只能改變振幅，觀察波形哪些特徵隨之改變。", ["單一波源", "頻率固定", "振幅可由 1 級調到 3 級"]],
+    "W-F3": ["第二座水眼將在你的判斷後甦醒。", "兩座水眼會以相同節奏持續振動；先選擇你預期看到的水面結構。", ["兩個波源同頻", "兩波源持續振動", "水面結果尚未顯示"]],
+    "W-F4": ["兩座水眼之間的距離可以被拉開。", "頻率保持固定；你要先押注干涉骨架如何改變，再移動水眼比對。", ["兩個波源同頻", "波速與頻率固定", "波源間距可由 4 格調到 8 格"]],
+    "B-F1": ["兩根磁柱的朝向被失序打亂。", "距離固定，只能翻轉右側磁柱；先判斷石門會靠近還是分開。", ["兩磁柱距離固定", "只改變右柱朝向", "其他力忽略不計"]],
+    "B-F2": ["正電粒子即將穿過一片看不見的磁場。", "速度與磁場已知；先選擇路徑偏折方向，再讓粒子進場。", ["粒子帶正電", "初速度向右", "磁場垂直紙面向內"]],
+    "B-F3": ["載流石橋只允許切換一次電流方向。", "磁場與導線位置固定；先判斷切換後橋面如何回應。", ["導線與磁場垂直", "磁場方向固定", "只切換電流的流向"]],
+    "B-F4": ["磁石要在兩種速度中選一種穿入線圈。", "路徑與磁石都相同；先判斷完成時間不同會怎樣改變神燈回應。", ["磁石、線圈與路徑相同", "總磁通量改變相同", "只改變穿入所需時間"]],
+    "O-F1": ["鏡城的法線仍在，反射通道卻沒有亮起。", "你可以改變入射角；先選擇反射方向如何跟著改變，再開啟光束。", ["鏡面平坦", "法線垂直鏡面", "所有角度都從法線量起"]],
+    "O-F2": ["一道光將從空氣斜射進入水晶。", "兩側介質與入射方向已固定；先選擇光進入後偏向哪一側。", ["光由空氣進入水晶", "水晶折射率較大", "入射角不為零"]],
+    "O-F3": ["水晶內的光正在逼近邊界。", "介質不變，只能逐步增加入射角；先判斷哪種現象可能封住出口。", ["光由水晶射向空氣", "水晶折射率較大", "可逐步增加入射角"]],
+    "O-F4": ["遠方燈塔送來近似平行的光束。", "凸透鏡已固定；先選擇光穿過後會抵達哪個區域。", ["使用薄凸透鏡", "入射光近似平行主軸", "忽略像差"]]
+  };
+  for (const temple of temples) {
+    for (const level of temple.tracks.foundation) {
+      const narrative = prePlanNarratives[level.code];
+      if (!narrative) continue;
+      [level.storyTeaser, level.storyProblem, level.prePlanKnown] = narrative;
+      level.observableSchema.knownInputs = level.prePlanKnown;
+    }
+  }
+  const rawEvidenceExceptions = {
+    "U-F1":"63 g 是儀器原始讀值；本關 assessedClaim 評量的是讀值的正確記錄格式，不是猜測秤面數值。",
+    "U-F2":"A、B 組都是比較散布所必需的原始資料；本關 assessedClaim 評量的是由資料判斷穩定度。"
+  };
+  for (const temple of temples) {
+    for (const level of temple.tracks.foundation) {
+      if (level.code === "EMW-F1") level.prePlanKnown = ["觀察同一段導線", "電流隨時間改變", "方向指示器尚未留下完整週期痕跡"];
+      if (level.code === "NUC-F4") level.prePlanKnown = ["自然界有四種基本交互作用", "β 衰變會改變核內中子與質子的身分", "需由機關判定主導此轉變的作用"];
+      if (rawEvidenceExceptions[level.code]) level.disclosureContract.prePlanConclusionException = rawEvidenceExceptions[level.code];
+      level.observableSchema.knownInputs = level.prePlanKnown;
+    }
+  }
+
   const totals = temples.reduce((acc, temple) => {
     acc.foundation += temple.tracks.foundation.length;
     acc.advanced += temple.tracks.advanced.length;
@@ -334,12 +465,12 @@
   }, { foundation: 0, advanced: 0 });
 
   return {
-    version: "5.0.0",
+    version: "5.1.0",
     world: {
       title: "法則神殿：失序紀元",
       role: "你是最後一位法則修復者。",
       premise: "世界由十七座神殿共同維持：十二座可見神殿管理日常現象，五座根源神殿守護力、聲、場、量子與原子核。如今「失序」竄入法則網，使現象仍在發生，原因卻彼此錯接。",
-      mission: "進入每座神殿，先立下預測，再讓機關顯示證據；取得初階的觀測印與進階的演算印，喚醒十七位守護者，重建天穹中央的法則核心。",
+      mission: "進入每座神殿，先對眼前的麻煩作出判斷，再親手啟動機關留下證據；取得初階的觀測印與進階的演算印，喚醒十七位守護者，重建天穹中央的法則核心。",
       finale: "集齊十七組雙印後，幽核神殿將開啟微界終門。真正的勝利不是背出公式，而是能用模型解釋世界，也能在證據不支持時修正自己。"
     },
     tracks: {

@@ -91,7 +91,7 @@ document.querySelector("[data-campaign]").innerHTML = `
     <div class="campaign-actions"><a class="campaign-cta" href="${campaignHref}">${mission ? "繼續遠征" : "重訪終幕"}<span aria-hidden="true">→</span></a><a class="campaign-secondary" href="#temple-selection">自由選殿</a></div>
   </div>
   <ol class="game-loop" aria-label="每關三步循環">
-    <li><span>01</span><div><strong>先預測</strong><small>在結果出現前，先押下自己的判斷。</small></div></li>
+    <li><span>01</span><div><strong>先押下判斷</strong><small>在結果出現前，先留下自己的選擇。</small></div></li>
     <li><span>02</span><div><strong>操作取證</strong><small>改變變因，讓圖像與數值留下證據。</small></div></li>
     <li><span>03</span><div><strong>解釋修正</strong><small>用證據選模型；答錯也能回溯再試。</small></div></li>
   </ol>

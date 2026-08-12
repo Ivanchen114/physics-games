@@ -10,6 +10,9 @@ const byCode = Object.fromEntries(levels.map(level => [level.code, level]));
 
 for (const level of levels) {
   assert.ok(level.image && level.visual, `${level.code}: missing visual evidence`);
+  assert.ok(level.assessedClaim, `${level.code}: assessedClaim missing`);
+  assert.ok(level.modelId, `${level.code}: modelId missing`);
+  assert.ok(level.observableSchema, `${level.code}: observableSchema missing`);
   if (level.track === "foundation") {
     const { min, max, step, base, target } = level.control;
     for (const [name, number] of Object.entries({ min, max, step, base, target })) {
@@ -41,7 +44,15 @@ assert.equal(byCode["E-F4"].control.target, 2);
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
 assert.match(app, /tailX, tailY\) is the point of application/);
 assert.match(app, /function forceArrow\(ctx, tailX, tailY, headX, headY/);
-assert.match(app, /同圖箭長比例 300:50 = 6:1/);
+assert.doesNotMatch(app, /同圖箭長比例 300:50 = 6:1/);
+assert.doesNotMatch(app, /二頭肌 300 N/);
+assert.doesNotMatch(app, /石球 100 N/);
+assert.doesNotMatch(app, /前腳掌正向力 1000 N/);
+assert.match(app, /physics\.deriveEvidenceState/);
+assert.match(app, /physics\.interferenceAt/);
+assert.match(app, /episodeTrace\.comparisonPlan/);
+assert.match(app, /episodeTrace\.evidenceRun/);
+assert.match(app, /episodeTrace\.status = "stale"/);
 assert.match(app, /放出光子 ΔE₃₂/);
 assert.doesNotMatch(app, /1 號|2 號|把標記|移動標記/);
 assert.doesNotMatch(app, /arrow\(ctx,500,285,355,230[^\n]*mg sinθ/);

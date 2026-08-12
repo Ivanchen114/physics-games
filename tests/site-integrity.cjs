@@ -32,7 +32,7 @@ for (const temple of data.temples) {
 }
 
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
-for (const contract of ["預測前顯示", "舊證據已失效", "law-temple-v3-\\$\\{name\\}-completed", "law-temple-v3-\\$\\{track\\}-completed"]) assert.match(app, new RegExp(contract));
+for (const contract of ["判斷已封存", "舊證據已失效", "law-temple-v3-\\$\\{name\\}-completed", "law-temple-v3-\\$\\{track\\}-completed"]) assert.match(app, new RegExp(contract));
 assert.match(app, /drawWaveVisual/);
 assert.match(app, /drawTitanVisual/);
 assert.match(app, /drawChronoVisual/);
@@ -57,7 +57,7 @@ for (const cue of ["evidence", "damage", "rewind", "success"]) assert.match(audi
 const home = fs.readFileSync(path.join(root, "home.js"), "utf8");
 assert.match(home, /nextMission/);
 assert.match(home, /法則遠征地圖/);
-assert.match(home, /先預測/);
+assert.match(home, /先押下判斷/);
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
 assert.match(index, /explore\.html/);
 assert.equal(artAssets.size, 33);

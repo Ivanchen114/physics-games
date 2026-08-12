@@ -4,7 +4,7 @@ const physics = require("../physics.js");
 
 assert.equal(data.temples.length, 17);
 assert.deepEqual(data.totals, { foundation: 68, advanced: 69 });
-assert.equal(data.version, "5.0.0");
+assert.equal(data.version, "5.1.0");
 assert.match(data.world.premise, /十七座神殿/);
 
 assert.ok(Math.abs(physics.tricepsWeight(300, 5, 30, 150) - 100) < 1e-9);
@@ -16,6 +16,12 @@ assert.ok(Math.abs(physics.typeB(1) - .288675) < 1e-5);
 const measurements = [25.40, 25.70, 25.80, 25.60];
 assert.ok(Math.abs(physics.mean(measurements) - 25.625) < 1e-12);
 assert.ok(Math.abs(physics.standardUncertaintyOfMean(measurements) - .085391) < 1e-5);
+assert.ok(Math.abs(physics.magneticRadius(.004, 3, .002, 2) - 3) < 1e-12);
+assert.equal(physics.magneticTrajectory({charge:1,mass:1,speed:3,magneticField:2}).direction, "up");
+assert.equal(physics.magneticTrajectory({charge:-1,mass:1,speed:3,magneticField:2}).direction, "down");
+assert.ok(Math.abs(physics.snellAngle(1, 1.5, 30) - 19.4712) < 1e-3);
+assert.ok(Math.abs(physics.criticalAngle(1.5, 1) - 41.8103) < 1e-3);
+assert.ok(Math.abs(physics.thinLens(10, 30).imageDistance - 15) < 1e-12);
 assert.ok(Math.abs(physics.rootSumSquare([physics.standardUncertaintyOfMean(measurements), physics.typeB(.1)]) - .09014) < 1e-4);
 
 const triceps = data.temples.find(t => t.id === "titans").tracks.advanced[1];

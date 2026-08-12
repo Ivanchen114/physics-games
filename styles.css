@@ -239,6 +239,10 @@ a { color: inherit; }
 .stage-layout { display: grid; grid-template-columns: minmax(290px, .7fr) minmax(560px, 1.3fr); gap: 26px; padding-top: 28px; }
 .brief-panel { align-self: start; padding: 26px; border: 1px solid var(--line); border-radius: 24px; background: var(--panel); box-shadow: var(--shadow); }
 .route-badge { display: inline-flex; align-items: center; gap: 8px; padding: .42rem .7rem; border: 1px solid color-mix(in srgb, var(--track) 52%, transparent); border-radius: 999px; color: var(--track); background: var(--track-soft); font-size: .75rem; font-weight: 900; }
+.curriculum-badge { display: inline-flex; align-items: center; width: fit-content; padding: .42rem .72rem; border: 1px solid color-mix(in srgb, var(--temple-color) 72%, transparent); border-radius: 999px; color: #fff1c6; background: rgba(9,15,25,.78); font-size: .75rem; font-weight: 850; }
+.guardian-history { margin-top: .8rem; border-top: 1px solid rgba(255,255,255,.12); padding-top: .7rem; }
+.guardian-history summary { width: fit-content; color: var(--temple-color); cursor: pointer; font-weight: 800; }
+.guardian-history p { margin: .65rem 0 0; color: var(--muted); line-height: 1.7; }
 .stage-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .guardian-badge { color: var(--muted); font-size: .72rem; font-weight: 800; }
 .flame-panel { display: grid; gap: 7px; margin: 16px 0 2px; padding: 13px 15px; border: 1px solid rgba(255, 139, 97, .34); border-radius: 14px; background: rgba(83, 31, 20, .18); }
