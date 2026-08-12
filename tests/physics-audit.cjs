@@ -81,14 +81,18 @@ for (const level of levels.filter(item => item.track === "foundation")) {
 for (const level of levels.filter(item => item.track === "advanced")) {
   const solved = physics.solveAdvanced(level);
   const exactValues = Object.fromEntries(solved.map(field => [field.id, field.answer]));
-  const evidence = physics.deriveEvidenceState(level, { phase: "evidence", values: exactValues });
+  const upstreamEvidence = level.code === "C-A4" ? {
+    "chrono.meet.entrySpeed": { value: 20, evidenceVersionId: "audit:C-A3", status: "supported" },
+    "chrono.meet.availableDistance": { value: 50, evidenceVersionId: "audit:C-A3", status: "supported" }
+  } : undefined;
+  const evidence = physics.deriveEvidenceState(level, { phase: "evidence", values: exactValues, upstreamEvidence });
   const expectedModel = physics.deriveAdvancedModel(level);
   const exact = physics.evaluateAdvanced(level, evidence, expectedModel, exactValues);
   assert.ok(exact.modelOK && exact.valuesOK, `${level.code}: domain solver output must satisfy its evaluation contract`);
   const first = solved[0];
   const mutation = Math.max(first.tolerance * 3, Math.max(1, Math.abs(first.answer)) * .1);
   const mutatedValues = { ...exactValues, [first.id]: first.answer + mutation };
-  const mutatedEvidence = physics.deriveEvidenceState(level, { phase: "evidence", values: mutatedValues });
+  const mutatedEvidence = physics.deriveEvidenceState(level, { phase: "evidence", values: mutatedValues, upstreamEvidence });
   const mutated = physics.evaluateAdvanced(level, mutatedEvidence, expectedModel, mutatedValues);
   assert.equal(mutated.valuesOK, false, `${level.code}: a material output mutation must be rejected`);
 }

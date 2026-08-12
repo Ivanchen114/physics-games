@@ -8,6 +8,7 @@ const route = data.tracks[track];
 const levels = temple.tracks[track];
 const completed = readProgress(track);
 const profile = readProfile();
+const evidenceLedger = readEvidenceLedger();
 let attempts = 0;
 let hintOpen = false;
 let flame = 3;
@@ -31,6 +32,34 @@ function readProgress(name) {
 
 function saveProgress() {
   localStorage.setItem(`law-temple-v3-${track}-completed`, JSON.stringify([...completed]));
+}
+
+function readEvidenceLedger() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("law-temple-v5-evidence-ledger") || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveEvidenceLedger() {
+  localStorage.setItem("law-temple-v5-evidence-ledger", JSON.stringify(evidenceLedger));
+}
+
+function dependencyContext(level) {
+  const manifest = level.stateContract?.dependencyManifest || [];
+  const upstreamEvidence = {};
+  for (const dependency of manifest) {
+    if (dependency.provenance === "upstream_evidence" && evidenceLedger[dependency.valueRef]) upstreamEvidence[dependency.valueRef] = evidenceLedger[dependency.valueRef];
+  }
+  return { upstreamEvidence };
+}
+
+function storeHandoffEvidence(evidence) {
+  if (!evidence?.handoffEvidence) return;
+  Object.assign(evidenceLedger, evidence.handoffEvidence);
+  saveEvidenceLedger();
 }
 
 function readProfile() {
@@ -303,30 +332,7 @@ function liveObservation(level, value) {
   const progress = max === min ? 1 : (Number(value) - min) / (max - min);
   const clamp = number => Math.max(0, Math.min(1, number));
   const shown = `${formatControlValue(value)}${level.control.unit ? ` ${level.control.unit}` : ""}`;
-  if (level.visual === "posture") {
-    const load = clamp(Number(value) / Math.max(1, max)),muscleRatio=Number(value)/5;
-    return { ratio: load, text: `臀大肌等髖伸肌群拉力：約 ${formatControlValue(muscleRatio)} W（W 為石球重力）` };
-  }
-  if (level.visual === "lever-distance") return { ratio: clamp(Number(value) / max), text: `力臂 ${shown}；同一施力下，力矩同步改變` };
-  if (level.visual === "force-direction") {
-    const perpendicular = Math.sin(Number(value) * Math.PI / 180);
-    return { ratio: perpendicular, text: `有效垂直分量：約 ${Math.round(perpendicular * 100)}%` };
-  }
-  if (level.visual === "xt-meet") return { ratio: clamp(Number(value) / 6), text: `觀察 t = ${shown}；圖上兩車位置差同步更新` };
-  if (level.visual === "energy-power") return { ratio: clamp(min / Number(value)), text: `相同做功下，相對功率：${Math.round(min / Number(value) * 100)}%` };
-  if (level.visual === "energy-friction") return { ratio: clamp(Number(value) / max), text: `粗糙度 ${shown}；機械能轉為內能的比例上升` };
-  if (level.visual === "electric-field") return { ratio: clamp(1 / Number(value) ** 2), text: `距離 ${shown}；相對場強約為 1/${formatControlValue(Number(value) ** 2)}` };
-  if (level.visual === "magnetic-induction") return { ratio: clamp(Number(value) / max), text: "移動越快，磁通量變化率與感應電動勢越大" };
-  if (level.visual === "thermal-flow") return { ratio: clamp(1 - progress), text: `接觸 ${shown}；兩物體溫差正在縮小` };
-  if (level.visual === "thermal-capacity") return { ratio: clamp(1 / Number(value)), text: "同樣吸熱量下，ΔT ∝ 1/C" };
-  if (level.visual === "thermal-gas") return { ratio: clamp(Number(value) / max), text: `定容下相對壓力：${Math.round(Number(value) / min * 100)}%` };
-  if (level.visual === "thermal-compress") return { ratio: clamp(Number(value) / max), text: "壓縮越強，外界做功與氣體內能越大" };
-  if (level.visual === "resonance-match") {
-    const amplitude = 1 / (1 + (Number(value) - max) ** 2 * 1.6);
-    return { ratio: amplitude, text: `接近固有頻率時，相對振幅升至 ${Math.round(amplitude * 100)}%` };
-  }
-  if (level.visual === "celestial-gravity") return { ratio: clamp(1 / Number(value) ** 2), text: `距離 ${shown}；相對引力為 1/${formatControlValue(Number(value) ** 2)}` };
-  return { ratio: clamp(progress), text: `${level.control.label} ${shown}；圖中對應物理量已同步更新` };
+  return { ratio: clamp(progress), text: `${level.control.label} ${shown}；機關幾何已同步移動，關係要等完整運轉後再判讀` };
 }
 
 function advancedChallenge(level) {
@@ -488,10 +494,11 @@ function bindAdvanced(level, index) {
     attempts += 1;
     updateAttempts("已啟動", attempts);
     const values = Object.fromEntries([...main.querySelectorAll("[data-answer]")].map(input => [input.dataset.answer, input.value]));
-    const proposedEvidence = physics.deriveEvidenceState(level, { phase: "evidence", values });
+    const dependencies = dependencyContext(level);
+    const proposedEvidence = physics.deriveEvidenceState(level, { phase: "evidence", values, ...dependencies });
     const outcome = physics.evaluateAdvanced(level, proposedEvidence, selectedModel, values);
-    const { results, modelOK, valuesOK } = outcome;
-    const evidence = physics.deriveEvidenceState(level, { phase: "evidence", values, modelOK, valuesOK });
+    const { results, modelOK, valuesOK, upstreamOK } = outcome;
+    const evidence = physics.deriveEvidenceState(level, { phase: "evidence", values, modelOK, valuesOK, ...dependencies });
     evidenceValid = true;
     episodeTrace.evidenceRun = {
       version: `${level.code}:${attempts}`,
@@ -501,9 +508,14 @@ function bindAdvanced(level, index) {
     };
     episodeTrace.status = modelOK && valuesOK ? "supported" : "contradicted";
     sound("evidence");
-    drawVisual(level, { phase: "evidence", values, modelOK, valuesOK });
+    drawVisual(level, { phase: "evidence", values, modelOK, valuesOK, ...dependencies });
     markChoice("model", evidence.expectedModel);
-    if (modelOK && valuesOK) completeLevel(level, index, feedback);
+    if (!upstreamOK) {
+      evidenceValid = false;
+      episodeTrace.status = "upstream_inconclusive";
+      feedback.className = "feedback";
+      feedback.innerHTML = "<strong>星門沒有收到上一段狹道軌跡。</strong><br>請先重新完成「延遲追擊」，讓入站速度與可用距離留下可追溯版本；這次不扣神火。";
+    } else if (modelOK && valuesOK) completeLevel(level, index, feedback);
     else {
       const wrongFields = results.filter(result => !result.ok).map(result => level.inputs.find(field => field.id === result.id).label);
       const damage = loseFlame(level);
@@ -536,6 +548,7 @@ function updateAttempts(label, count) {
 }
 
 function completeLevel(level, index, feedback) {
+  storeHandoffEvidence(episodeTrace.evidenceRun?.observable);
   const firstClear = !completed.has(level.code);
   completed.add(level.code);
   saveProgress();
@@ -583,14 +596,45 @@ function drawVisual(level, state) {
     ctx.restore();
     return;
   }
-  if (type.startsWith("wave-")) drawWaveVisual(ctx, type, value, revealed, w, h, evidence);
-  else if (type.startsWith("photo-")) drawPhotoVisual(ctx, type, value, revealed, w, h, evidence);
-  else if (type.startsWith("measure-") || type.startsWith("uncertainty-")) drawMeasureVisual(ctx, type, value, revealed, w, h);
-  else if (type.startsWith("xt-") || type.startsWith("chase") || type.startsWith("brake") || type.startsWith("chrono-")) drawChronoVisual(ctx, type, value, revealed, w, h, evidence);
-  else if (["momentum-","energy-","electric-","magnetic-","optics-","thermal-","celestial-","newton-","resonance-","emwave-","quantum-","nuclear-"].some(prefix => type.startsWith(prefix))) drawExpansionVisual(ctx, type, value, revealed, w, h, evidence);
-  else drawTitanVisual(ctx, type, value, revealed, w, h, evidence);
+  if (preview) {
+    drawPreviewApparatus(ctx, level, evidence, w, h);
+    ctx.restore();
+    return;
+  }
+  drawEvidenceApparatus(ctx, level, evidence, revealed, w, h);
   if (observed && level.inputs) drawCandidateComparison(ctx, level, evidence, w, h);
   ctx.restore();
+}
+
+function drawEvidenceApparatus(ctx, level, evidence, revealed, w, h) {
+  const type = level.visual;
+  if (type.startsWith("wave-")) drawWaveVisual(ctx, type, evidence, revealed, w, h);
+  else if (type.startsWith("photo-")) drawPhotoVisual(ctx, type, evidence, revealed, w, h);
+  else if (type.startsWith("measure-") || type.startsWith("uncertainty-")) drawMeasureVisual(ctx, type, evidence, revealed);
+  else if (type.startsWith("xt-") || type.startsWith("chase") || type.startsWith("brake") || type.startsWith("chrono-")) drawChronoVisual(ctx, type, evidence, revealed, w, h);
+  else if (["momentum-","energy-","electric-","magnetic-","optics-","thermal-","celestial-","newton-","resonance-","emwave-","quantum-","nuclear-"].some(prefix => type.startsWith(prefix))) drawExpansionVisual(ctx, type, evidence, revealed, w, h);
+  else drawTitanVisual(ctx, type, evidence, revealed, w, h);
+}
+
+function drawPreviewApparatus(ctx, level, evidence, w, h) {
+  const previewEvidence = {
+    ...evidence,
+    observed: true,
+    wave: evidence.wave ? { ...evidence.wave, observed: true } : evidence.wave,
+    domainEvidence: { ...evidence.domainEvidence, observed: false, previewActive: true }
+  };
+  const originalFillText = ctx.fillText;
+  ctx.fillText = () => {};
+  drawEvidenceApparatus(ctx, level, previewEvidence, false, w, h);
+  ctx.fillText = originalFillText;
+  const observable = evidence.domainEvidence.observable;
+  const x = 185 + observable.normalizedControl * 630;
+  ctx.strokeStyle = "rgba(255,220,139,.72)";
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(185,472); ctx.lineTo(815,472); ctx.stroke();
+  dot(ctx, x, 472, "#ffdc8b", 12);
+  label(ctx, `${level.control.label} ${formatControlValue(observable.controlValue)}${level.control.unit ? ` ${level.control.unit}` : ""}`, 185, 515, "#ffdc8b", 18);
+  label(ctx, "完整痕跡待運轉", 690, 515, "#dbe3ef", 15);
 }
 
 function drawCandidateComparison(ctx, level, evidence, w, h) {
@@ -668,7 +712,8 @@ function forceArrow(ctx, tailX, tailY, headX, headY, color, text) {
   arrow(ctx, tailX, tailY, headX, headY, color, text);
 }
 
-function drawTitanVisual(ctx, type, value, revealed, w, h, evidence) {
+function drawTitanVisual(ctx, type, evidence, revealed, w, h) {
+  const value = evidence.domainEvidence.observable.controlValue;
   const pivotX = 350, pivotY = 385;
   if (type === "triceps") {
     const ballX = 460, ballY = 195;
@@ -759,7 +804,8 @@ function graphAxes(ctx, x, y, w, h, xLabel, yLabel) {
   label(ctx,xLabel,x+w-20,y+35,"#dbe3ef",16); label(ctx,yLabel,x-20,y-h-12,"#dbe3ef",16);
 }
 
-function drawChronoVisual(ctx, type, value, revealed, w, h, evidence) {
+function drawChronoVisual(ctx, type, evidence, revealed, w, h) {
+  const value = evidence.domainEvidence.observable.controlValue;
   const x=130,y=460,gw=720,gh=320;
   const velocityGraph=type === "brake" || type === "chrono-stop";
   graphAxes(ctx,x,y,gw,gh,"t",velocityGraph?"速度 v":"位置 x");
@@ -798,7 +844,8 @@ function drawChronoVisual(ctx, type, value, revealed, w, h, evidence) {
   }
 }
 
-function drawPhotoVisual(ctx, type, value, revealed, w, h, evidence) {
+function drawPhotoVisual(ctx, type, evidence, revealed, w, h) {
+  const value = evidence.domainEvidence.observable.controlValue;
   const left=160,right=835,axisY=345,scale=120;
   ctx.fillStyle="rgba(16,30,52,.84)";ctx.fillRect(110,120,780,340);
   ctx.strokeStyle="#dce6f2";ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(left,axisY);ctx.lineTo(right,axisY);ctx.stroke();
@@ -835,7 +882,8 @@ function drawPhotoVisual(ctx, type, value, revealed, w, h, evidence) {
   }
 }
 
-function drawWaveVisual(ctx, type, value, revealed, w, h, evidence) {
+function drawWaveVisual(ctx, type, evidence, revealed, w, h) {
+  const value = evidence.domainEvidence.observable.controlValue;
   const cx=w/2,cy=h/2+18,wave=evidence.wave;
   ctx.fillStyle="rgba(6,31,48,.72)";ctx.fillRect(90,105,w-180,h-155);
   if(!wave.observed){
@@ -868,7 +916,8 @@ function drawWaveVisual(ctx, type, value, revealed, w, h, evidence) {
   if(revealed)evidenceCaption(ctx,type === "wave-frequency"?"波速固定時，模型以 λ=v/f 生成條紋間距":type === "wave-amplitude"?"只改振幅，模型中的 λ 不變":type === "wave-separation"?"只改源距，波長保持不變":type === "wave-lines"?"節腹線數由 d/λ 計算，背景波場也用同一組參數":"畫面每格由兩源程差與相位直接計算");
 }
 
-function drawMeasureVisual(ctx, type, value, revealed) {
+function drawMeasureVisual(ctx, type, evidence, revealed) {
+  const value = evidence.domainEvidence.observable.controlValue;
   ctx.fillStyle="rgba(17,15,35,.8)";ctx.fillRect(120,120,760,330);
   if(type === "measure-scale" || type === "uncertainty-mass") {
     const display=type === "measure-scale"?["—","63 g","63.000 g"][Math.max(0,Math.min(2,Math.round(Number(value))))]:"63 g";
@@ -892,22 +941,22 @@ function drawMeasureVisual(ctx, type, value, revealed) {
   }
 }
 
-function drawExpansionVisual(ctx, type, value, revealed, w, h, evidence) {
+function drawExpansionVisual(ctx, type, evidence, revealed, w, h) {
   ctx.fillStyle = "rgba(7,14,24,.58)";
   ctx.fillRect(90, 105, w - 180, h - 155);
   const family = type.split("-")[0];
-  if (family === "momentum") drawMomentumEvidence(ctx, type, value, revealed);
-  else if (family === "energy") drawEnergyEvidence(ctx, type, value, revealed);
-  else if (family === "electric") drawElectricEvidence(ctx, type, value, revealed);
-  else if (family === "magnetic") drawMagneticEvidence(ctx, type, value, revealed, evidence);
-  else if (family === "optics") drawOpticsEvidence(ctx, type, value, revealed, evidence);
-  else if (family === "thermal") drawThermalEvidence(ctx, type, value, revealed);
-  else if (family === "celestial") drawCelestialEvidence(ctx, type, value, revealed);
-  else if (family === "newton") drawNewtonEvidence(ctx, type, value, revealed);
-  else if (family === "resonance") drawResonanceEvidence(ctx, type, value, revealed);
-  else if (family === "emwave") drawEMWaveEvidence(ctx, type, value, revealed);
-  else if (family === "quantum") drawQuantumEvidence(ctx, type, value, revealed);
-  else drawNuclearEvidence(ctx, type, value, revealed);
+  if (family === "momentum") drawMomentumEvidence(ctx, type, evidence, revealed);
+  else if (family === "energy") drawEnergyEvidence(ctx, type, evidence, revealed);
+  else if (family === "electric") drawElectricEvidence(ctx, type, evidence, revealed);
+  else if (family === "magnetic") drawMagneticEvidence(ctx, type, evidence, revealed);
+  else if (family === "optics") drawOpticsEvidence(ctx, type, evidence, revealed);
+  else if (family === "thermal") drawThermalEvidence(ctx, type, evidence, revealed);
+  else if (family === "celestial") drawCelestialEvidence(ctx, type, evidence, revealed);
+  else if (family === "newton") drawNewtonEvidence(ctx, type, evidence, revealed);
+  else if (family === "resonance") drawResonanceEvidence(ctx, type, evidence, revealed);
+  else if (family === "emwave") drawEMWaveEvidence(ctx, type, evidence, revealed);
+  else if (family === "quantum") drawQuantumEvidence(ctx, type, evidence, revealed);
+  else drawNuclearEvidence(ctx, type, evidence, revealed);
 }
 
 function evidenceCaption(ctx, text, color = "#a1fff5") {
@@ -919,11 +968,13 @@ function drawCart(ctx, x, y, color, width = 130) {
   dot(ctx, x + 28, y + 66, "#202a37", 15); dot(ctx, x + width - 28, y + 66, "#202a37", 15);
 }
 
-function drawMomentumEvidence(ctx, type, value, revealed) {
+function drawMomentumEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   const calc = type.includes("calc");
   if(type.includes("impulse")) {
     drawCart(ctx, 370, 320, "#ff806b",180);
-    const duration=calc?.25:Number(value),forceLength=calc?150:125;
+    const duration=calc?.25:domain.impulseFactor,forceLength=calc?150:125;
     forceArrow(ctx,550,348,550+forceLength,348,"#ffd36d",calc?"F = 120 N":"相同平均力 F");
     ctx.strokeStyle="#65ded2";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(250,210);ctx.lineTo(250+(calc?150:duration*120),210);ctx.stroke();
     label(ctx,calc?"Δt = 0.25 s":`作用時間 ${duration} 級`,250,185,"#a1fff5",18);
@@ -933,7 +984,7 @@ function drawMomentumEvidence(ctx, type, value, revealed) {
     const cartLen=stoneLen;arrow(ctx,320,300,320-cartLen,300,"#65ded2",calc?"人舟 p = −24":"人舟反向動量");
   } else if(type.includes("cushion")) {
     drawCart(ctx, 360, 240, "#ff806b",180);arrow(ctx,450,220,450,340,"#ffd36d","入射動量");
-    const time=Math.max(1,Number(value)),padHeight=25+time*22,forceLength=190/time;
+    const time=Math.max(1,Number(value)),padHeight=25+time*22,forceLength=190*domain.forceFactor;
     ctx.fillStyle="#6ce7a8";ctx.fillRect(300,400-padHeight,400,padHeight);label(ctx,"厚軟墊",455,440,"#bfffe0",18);
     forceArrow(ctx,450,385-padHeight,450,385-padHeight-forceLength,"#ff806b","平均撞擊力");
   } else {
@@ -950,7 +1001,9 @@ function drawMomentumEvidence(ctx, type, value, revealed) {
   }
 }
 
-function drawEnergyEvidence(ctx, type, value, revealed) {
+function drawEnergyEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   if(type.includes("work")) {
     const theta=type.includes("calc")?60:Number(value),rad=theta*Math.PI/180,tailX=400,tailY=340,len=165;
     ctx.strokeStyle="#dce6f2";ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(180,400);ctx.lineTo(820,400);ctx.stroke();ctx.fillStyle="#ffbf5c";ctx.fillRect(345,300,110,80);
@@ -966,17 +1019,19 @@ function drawEnergyEvidence(ctx, type, value, revealed) {
     const rough=type.includes("calc")?2:Number(value),loss=Math.min(.82,.08+rough*.18),total=230;
     drawCart(ctx,300,300,"#ffbf5c",150);arrow(ctx,450,285,450+200*(1-loss),285,"#ffd36d","v");forceArrow(ctx,300,365,300-(55+rough*28),365,"#ff806b","摩擦力");ctx.fillStyle="#69d8cb";ctx.fillRect(650,410,55,-total*(1-loss));ctx.fillStyle="#ff806b";ctx.fillRect(740,410,55,-total*loss);label(ctx,"機械能",635,450,"#dce6f2",16);label(ctx,"內能",740,450,"#dce6f2",16);label(ctx,`粗糙 ${rough}｜轉為內能 ${Math.round(loss*100)}%`,345,185,"#ffdc8b",18);if(revealed)evidenceCaption(ctx,"摩擦把機械能轉為物體與地面的內能；總能量仍守恆");return;
   }
-  const time=type.includes("calc")?2:Number(value),powerRatio=Math.min(1,2/time),powerHeight=70+220*powerRatio;
+  const time=type.includes("calc")?2:Number(value),powerRatio=type.includes("calc")?1:Math.min(1,domain.energyFactor),powerHeight=70+220*powerRatio;
   ctx.fillStyle="#69d8cb";ctx.fillRect(330,410,110,-220);ctx.fillStyle="#ffbf5c";ctx.fillRect(600,410,110,-powerHeight);label(ctx,"相同做功 W",340,455,"#dce6f2",18);label(ctx,`完成時間 ${time} s`,575,455,"#ffdc8b",18);label(ctx,`功率 ∝ 1/${time}`,610,380-powerHeight,"#a1fff5",18);if(revealed)evidenceCaption(ctx,type.includes("calc")?"P = mgh/t = 147 W":"做功相同：所需時間越短，平均功率越大");
 }
 
-function drawElectricEvidence(ctx, type, value, revealed) {
+function drawElectricEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   if (type.includes("series") || type.includes("parallel")) {
     ctx.strokeStyle="#84a7ff";ctx.lineWidth=7;
     if(type.includes("parallel")) {
       ctx.beginPath();ctx.moveTo(210,180);ctx.lineTo(790,180);ctx.moveTo(210,410);ctx.lineTo(790,410);ctx.moveTo(210,180);ctx.lineTo(210,260);ctx.moveTo(210,330);ctx.lineTo(210,410);ctx.stroke();
       ctx.fillStyle="#ffbf5c";ctx.fillRect(190,260,40,70);label(ctx,"12 V",150,365,"#ffdc8b",18);
-      const branchCount=type.includes("calc")?2:Math.max(1,Math.min(3,Math.round(Number(value)))),xs=branchCount===1?[500]:branchCount===2?[390,610]:[330,500,670];
+      const branchCount=type.includes("calc")?2:Math.max(1,Math.min(3,domain.branchCount)),xs=branchCount===1?[500]:branchCount===2?[390,610]:[330,500,670];
       xs.forEach((x,index)=>{ctx.strokeStyle="#84a7ff";ctx.beginPath();ctx.moveTo(x,180);ctx.lineTo(x,245);ctx.moveTo(x,335);ctx.lineTo(x,410);ctx.stroke();ctx.fillStyle="#b99cff";ctx.fillRect(x-30,245,60,90);label(ctx,type.includes("calc")?(index?"3 Ω":"6 Ω"):"R",x-24,300,"white",16);});
       if(!type.includes("calc")){forceArrow(ctx,210,225,210,225-(55+branchCount*30),"#65ded2","I總");label(ctx,`${branchCount} 支路`,455,150,"#a1fff5",18);}
       if(revealed)evidenceCaption(ctx,type.includes("calc")?"並聯：Req = 2 Ω｜I總 = 6 A":"支路增加 → 等效電阻下降 → 電池總電流上升");
@@ -991,18 +1046,19 @@ function drawElectricEvidence(ctx, type, value, revealed) {
   if(type.includes("field")) {
     const cx=500,cy=300;dot(ctx,cx,cy,"#ff806b",42);label(ctx,"+",484,315,"white",40);
     for(let i=0;i<8;i++){const a=i*Math.PI/4,tx=cx+Math.cos(a)*72,ty=cy+Math.sin(a)*72;arrow(ctx,tx,ty,cx+Math.cos(a)*180,cy+Math.sin(a)*180,"#84a7ff","");}
-    if(!type.includes("calc")){const distance=Math.max(1,Number(value)),testX=cx+80+distance*55,forceLen=Math.max(18,115/(distance*distance));dot(ctx,testX,300,"#ffdc8b",13);forceArrow(ctx,testX,300,testX+forceLen,300,"#65ded2","F/q");label(ctx,`r = ${distance} 格`,testX-30,355,"#ffdc8b",17);}
+    if(!type.includes("calc")){const distance=Math.max(1,Number(value)),testX=cx+80+distance*55,forceLen=Math.max(18,115*domain.fieldFactor);dot(ctx,testX,300,"#ffdc8b",13);forceArrow(ctx,testX,300,testX+forceLen,300,"#65ded2","F/q");label(ctx,`r = ${distance} 格`,testX-30,355,"#ffdc8b",17);}
     if(revealed)evidenceCaption(ctx,type.includes("calc")?"正電荷外 0.30 m：E = 4.0×10⁵ N/C，方向向外":"正試驗電荷受力方向定義為電場方向；正電荷的場向外");
     return;
   }
-  const leftX=330,rightX=680,rightPositive=type.includes("force")||Number(value)>0;
+  const leftX=330,rightX=680,rightPositive=type.includes("force")||domain.chargeSign>0;
   dot(ctx,leftX,300,"#ff806b",42);label(ctx,"+",314,315,"white",40);dot(ctx,rightX,300,rightPositive?"#ff806b":"#84a7ff",42);label(ctx,rightPositive?"+":"−",664,315,"white",40);
   if(rightPositive){forceArrow(ctx,leftX,300,leftX-115,300,"#84a7ff","");forceArrow(ctx,rightX,300,rightX+115,300,"#84a7ff","");}
   else{forceArrow(ctx,leftX,300,leftX+115,300,"#84a7ff","");forceArrow(ctx,rightX,300,rightX-115,300,"#84a7ff","");}
   if(revealed)evidenceCaption(ctx,type.includes("force")?"同號電荷：兩力等大反向，大小 0.60 N":"兩力箭尾各在受力電荷上：同號相斥、異號相吸");
 }
 
-function drawMagneticEvidence(ctx, type, value, revealed, evidence) {
+function drawMagneticEvidence(ctx, type, evidence, revealed) {
+  const value = evidence.domainEvidence.observable.controlValue;
   const observed=evidence.observed;
   if (type.includes("poles")) {
     ctx.fillStyle="#ff806b";ctx.fillRect(220,260,220,90);ctx.fillStyle=Number(value)===2?"#ff806b":"#84a7ff";ctx.fillRect(560,260,220,90);label(ctx,"N",370,317,"white",30);label(ctx,Number(value)===2?"N":"S",580,317,"white",30);
@@ -1031,7 +1087,8 @@ function drawMagneticEvidence(ctx, type, value, revealed, evidence) {
   if(revealed)evidenceCaption(ctx,type.includes("radius")?"磁力始終垂直速度並指向圓心：r = 3.0 m":type.includes("calc")?"q>0、v 向右、B 入紙面：F_B 向上，大小 0.030 N":"q>0、v 向右、B 入紙面：由 v×B 得磁力向上");
 }
 
-function drawOpticsEvidence(ctx, type, value, revealed, evidence) {
+function drawOpticsEvidence(ctx, type, evidence, revealed) {
+  const value = evidence.domainEvidence.observable.controlValue;
   const observed=evidence.observed;
   const interfaceY=315,normalX=500;
   const surface=()=>{ctx.strokeStyle="#d8e6f5";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(150,interfaceY);ctx.lineTo(850,interfaceY);ctx.stroke();ctx.setLineDash([10,8]);ctx.strokeStyle="#b8c5d5";ctx.beginPath();ctx.moveTo(normalX,135);ctx.lineTo(normalX,470);ctx.stroke();ctx.setLineDash([]);label(ctx,"法線",515,155,"#dce6f2",16);};
@@ -1073,7 +1130,9 @@ function drawOpticsEvidence(ctx, type, value, revealed, evidence) {
   if(revealed)evidenceCaption(ctx,calc?"sinθ₂ = sin30°/1.5 → θ₂ ≈ 19.5°":"進入較高折射率介質：折射角變小、光線偏向法線");
 }
 
-function drawThermalEvidence(ctx, type, value, revealed) {
+function drawThermalEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   if(type.includes("flow")){
     const fraction=Math.max(0,Math.min(1,Number(value)/5)),hotT=Math.round(80-30*fraction),coldT=Math.round(20+30*fraction),difference=hotT-coldT;
     ctx.strokeStyle="#d4dce8";ctx.lineWidth=6;ctx.strokeRect(180,190,260,210);ctx.strokeRect(560,190,260,210);
@@ -1083,7 +1142,7 @@ function drawThermalEvidence(ctx, type, value, revealed) {
     const capacity=Math.max(1,Number(value)),deltaA=100,deltaB=Math.round(100/capacity),baseY=410;
     ctx.fillStyle="#ff806b";ctx.fillRect(290,baseY,100,-40-deltaA*1.6);ctx.fillStyle="#84a7ff";ctx.fillRect(610,baseY,100,-40-deltaB*1.6);label(ctx,"A：C = 1",290,455,"#ffb6ac",17);label(ctx,`B：C = ${capacity}`,605,455,"#b7ccff",17);label(ctx,`ΔT_A = ${deltaA}`,275,185,"#ffb6ac",18);label(ctx,`ΔT_B = ${deltaB}`,600,185,"#b7ccff",18);
   } else if(type.includes("gas")){
-    const temp=Math.max(1,Number(value)),speed=28*Math.sqrt(temp/300),pressure=temp/300;
+    const temp=Math.max(1,Number(value)),speed=28*Math.sqrt(domain.pressureFactor),pressure=domain.pressureFactor;
     ctx.strokeStyle="#d4dce8";ctx.lineWidth=6;ctx.strokeRect(250,170,500,260);for(let i=0;i<18;i++){const x=285+(i%6)*82,y=215+Math.floor(i/6)*88;dot(ctx,x,y,"#84a7ff",8);arrow(ctx,x,y,x+speed*((i%3)-1),y+speed*(i%2?-.7:.7),"rgba(255,220,139,.75)","");}label(ctx,`T = ${temp} K`,300,465,"#a1fff5",19);label(ctx,`P/P₀ = ${pressure.toFixed(1)}`,590,465,"#ffdc8b",19);
   } else if(type.includes("compress")){
     const compression=Math.max(1,Number(value)),pistonY=150+compression*48,gasTop=pistonY+24;
@@ -1094,9 +1153,11 @@ function drawThermalEvidence(ctx, type, value, revealed) {
   if (revealed) evidenceCaption(ctx,type.includes("flow")?"熱由高溫物體傳向低溫物體，直到熱平衡":type.includes("capacity")?"相同吸熱量 Q：熱容量較小者 ΔT 較大":type.includes("gas")?"定容：P ∝ 絕對溫度 T（使用 K）":type.includes("firstlaw")?"採 Wby 為氣體對外做功：ΔU = Q − Wby = 300 J":"能量帳目：熱、功與內能");
 }
 
-function drawCelestialEvidence(ctx, type, value, revealed) {
+function drawCelestialEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   if(type.includes("gravity")) {
-    const calc=type.includes("calc"),ratio=calc?1:Number(value),leftX=calc?320:500-95*ratio,rightX=calc?680:500+95*ratio,len=calc?100:Math.max(28,150/(ratio*ratio));
+    const calc=type.includes("calc"),ratio=calc?1:domain.radiusFactor,leftX=calc?320:500-95*ratio,rightX=calc?680:500+95*ratio,len=calc?100:Math.max(28,150*domain.gravityFactor);
     dot(ctx,leftX,300,"#ffbf5c",46);dot(ctx,rightX,300,"#91a8ff",34);forceArrow(ctx,leftX,300,leftX+len,300,"#ff806b","Fg");forceArrow(ctx,rightX,300,rightX-len,300,"#ff806b","Fg");
     if(revealed)evidenceCaption(ctx,calc?"萬有引力大小 3.34×10⁻⁷ N；兩物體受力等大反向":"距離增為 2 倍：同一比例尺下，引力箭長變為 1/4");return;
   }
@@ -1106,13 +1167,15 @@ function drawCelestialEvidence(ctx, type, value, revealed) {
   const cx=500,cy=300,calc=type.includes("calc"),radius=type.includes("kepler")?230:type.includes("period")?100+Number(value)*28:185;
   dot(ctx,cx,cy,"#ffbf5c",55);ctx.strokeStyle="rgba(145,168,255,.7)";ctx.lineWidth=4;ctx.beginPath();ctx.arc(cx,cy,radius,0,Math.PI*2);ctx.stroke();
   const quadrant=!calc&&type.includes("circular")?Number(value):1,a=(quadrant-1)*Math.PI/2,sx=cx+radius*Math.cos(a),sy=cy-radius*Math.sin(a);dot(ctx,sx,sy,"#91a8ff",20);
-  const radialX=(cx-sx)/radius,radialY=(cy-sy)/radius,orbitScale=!calc&&type.includes("period")?Math.max(1,Number(value)):1,velocityLength=120/Math.sqrt(orbitScale),forceLength=125/(orbitScale*orbitScale);
+  const radialX=(cx-sx)/radius,radialY=(cy-sy)/radius,orbitScale=!calc&&type.includes("period")?Math.max(1,domain.radiusFactor):1,velocityLength=120*(type.includes("period")?domain.orbitalSpeedFactor:1),forceLength=125/(orbitScale*orbitScale);
   const tangentX=Math.sin(a),tangentY=Math.cos(a);arrow(ctx,sx,sy,sx+tangentX*velocityLength,sy-tangentY*velocityLength,"#65ded2","v");forceArrow(ctx,sx,sy,sx+radialX*Math.max(32,forceLength),sy+radialY*Math.max(32,forceLength),"#ff806b","Fg / a");
-  if(!calc&&type.includes("period"))label(ctx,`外軌道：速率與引力箭長同步縮短`,295,485,"#a1fff5",18);
+  if(revealed&&type.includes("period"))label(ctx,"半徑增大：軌道速率與引力同步下降",295,485,"#a1fff5",18);
   if(revealed)evidenceCaption(ctx,type.includes("kepler")?"T² ∝ r³：半徑 4 倍，週期 8 倍":type.includes("speed")?"GMm/r² = mv²/r → v ≈ 7.9 km/s":type.includes("calc-period")?"T = 2πr/v ≈ 5.83×10³ s":"速度切向、引力與向心加速度都指向圓心");
 }
 
-function drawNewtonEvidence(ctx, type, value, revealed) {
+function drawNewtonEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   if (type.includes("incline")) {
     ctx.strokeStyle="#dce6f2";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(170,410);ctx.lineTo(760,185);ctx.stroke();
     ctx.save();ctx.translate(500,285);ctx.rotate(-.36);ctx.fillStyle="#73c8ff";ctx.fillRect(-55,-40,110,80);ctx.restore();
@@ -1124,7 +1187,7 @@ function drawNewtonEvidence(ctx, type, value, revealed) {
     ctx.strokeStyle="#dce6f2";ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(165,190);ctx.lineTo(165,430);ctx.lineTo(820,430);ctx.stroke();
     ctx.strokeStyle="#73c8ff";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(210,210);ctx.quadraticCurveTo(480,220,760,420);ctx.stroke();
     const time=type.includes("calc")?3:Math.max(1,Number(value)),fraction=Math.min(1,time/4),px=210+(760-210)*fraction,py=210+(420-210)*fraction*fraction;
-    dot(ctx,px,py,"#ffdc8b",13);arrow(ctx,px,py,px+145,py,"#65ded2","vₓ（固定）");arrow(ctx,px,py,px,py+35+time*25,"#ff806b","vᵧ");forceArrow(ctx,px,py,px,py+65,"#ffd36d","mg");label(ctx,`t = ${time} 級`,390,175,"#a1fff5",18);
+    dot(ctx,px,py,"#ffdc8b",13);arrow(ctx,px,py,px+145*domain.horizontalVelocity,py,"#65ded2","vₓ");arrow(ctx,px,py,px,py+35+domain.verticalVelocityFactor*25,"#ff806b","vᵧ");forceArrow(ctx,px,py,px,py+65,"#ffd36d","mg");label(ctx,`t = ${time} 級`,390,175,"#a1fff5",18);
     if(revealed) evidenceCaption(ctx,type.includes("calc")?"t = 3 s｜水平距離 60 m":"水平等速・鉛直等加速｜共享同一時間");
     return;
   }
@@ -1143,7 +1206,9 @@ function drawNewtonEvidence(ctx, type, value, revealed) {
   if(revealed) evidenceCaption(ctx,type.includes("inertia")?"ΣF = 0｜速度向量保持不變":type.includes("friction")&&type.includes("calc")?"fk = μkmg｜a = 3.04 m/s²":type.includes("friction")?"未滑動：靜摩擦配合推力；滑動後 fk=μkN":type.includes("calc")?"ΣF = ma｜合力 20 N，加速度 4.0 m/s²":"加速度方向與合力相同");
 }
 
-function drawResonanceEvidence(ctx, type, value, revealed) {
+function drawResonanceEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   const x0=165,x1=835,mid=300;
   ctx.strokeStyle="rgba(220,230,242,.5)";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x0,mid);ctx.lineTo(x1,mid);ctx.stroke();
   if(type.includes("tube")) {
@@ -1153,7 +1218,7 @@ function drawResonanceEvidence(ctx, type, value, revealed) {
     if(revealed) evidenceCaption(ctx,type.includes("calc")?"閉管基音：f₁ = v/(4L) = 200 Hz":"閉端為位移節點・開端為位移腹點");
     return;
   }
-  const harmonics=type.includes("harmonic")?3:type.includes("pitch")?Math.max(1,Number(value)):type.includes("standing")?2:type.includes("string")?1:type.includes("wave")?2:1;
+  const harmonics=type.includes("harmonic")?3:type.includes("pitch")?domain.harmonic:type.includes("standing")?2:type.includes("string")?1:type.includes("wave")?2:1;
   ctx.strokeStyle="#58e0d3";ctx.lineWidth=8;ctx.beginPath();
   for(let i=0;i<=240;i++){const t=i/240;const x=x0+(x1-x0)*t;const y=mid-120*Math.sin(harmonics*Math.PI*t);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}ctx.stroke();
   for(let n=0;n<=harmonics;n++) dot(ctx,x0+(x1-x0)*n/harmonics,mid,"#ffdc8b",9);
@@ -1164,12 +1229,14 @@ function drawResonanceEvidence(ctx, type, value, revealed) {
   if(type.includes("pitch")){label(ctx,`頻率等級 ${value}`,420,175,"#a1fff5",18);}
   if(type.includes("match")){
     graphAxes(ctx,220,445,560,240,"驅動頻率","振幅");ctx.strokeStyle="#b58cff";ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(230,430);ctx.bezierCurveTo(380,425,420,180,500,170);ctx.bezierCurveTo(580,180,620,425,770,430);ctx.stroke();dot(ctx,500,170,"#ffdc8b",10);label(ctx,"固有頻率",510,160,"#ffdc8b",16);
-    const frequency=Math.max(1,Math.min(5,Number(value))),px=230+(frequency-1)*135,amplitude=1/(1+(frequency-5)**2*1.6),py=430-amplitude*260;dot(ctx,px,py,"#ff806b",13);ctx.strokeStyle="rgba(255,128,107,.55)";ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(px,430);ctx.lineTo(px,py);ctx.stroke();label(ctx,`驅動 ${frequency} 級`,px-45,465,"#ffb6ac",16);
+    const frequency=Math.max(1,Math.min(5,Number(value))),px=230+(frequency-1)*135,amplitude=domain.relativeAmplitude,py=430-amplitude*260;dot(ctx,px,py,"#ff806b",13);ctx.strokeStyle="rgba(255,128,107,.55)";ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(px,430);ctx.lineTo(px,py);ctx.stroke();label(ctx,`驅動 ${frequency} 級`,px-45,465,"#ffb6ac",16);
   }
   if(revealed) evidenceCaption(ctx,type.includes("pitch")?"頻率增加：相同時間內振動次數增加，音高上升":type.includes("match")?"驅動頻率接近固有頻率時，穩態振幅達到峰值":type.includes("harmonic")?"第三諧波：f₃ = 3f₁ = 600 Hz":type.includes("string")?"兩端固定基音：f₁ = v/(2L) = 200 Hz":type.includes("calc")?"v = fλ｜波長 0.80 m":"節點不動・腹點振幅最大");
 }
 
-function drawEMWaveEvidence(ctx, type, value, revealed) {
+function drawEMWaveEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   if(type.includes("transformer")||type.includes("voltage")||type.includes("current")) {
     ctx.fillStyle="#695f58";ctx.fillRect(430,170,140,250);
     const foundation=type === "emwave-transformer",primaryTurns=foundation?4:6,secondaryTurns=foundation?Math.max(3,2+Number(value)*2):3;
@@ -1192,7 +1259,7 @@ function drawEMWaveEvidence(ctx, type, value, revealed) {
   }
   const start=150,end=850,cy=300;
   if(type.includes("polarization")) {
-    const angle=Number(value)*Math.PI/180,amp=Math.cos(angle)**2;ctx.strokeStyle="#b58cff";ctx.lineWidth=10;ctx.beginPath();ctx.arc(350,300,105,0,Math.PI*2);ctx.arc(650,300,105,0,Math.PI*2);ctx.stroke();
+    const angle=Number(value)*Math.PI/180,amp=domain.polarizedIntensity;ctx.strokeStyle="#b58cff";ctx.lineWidth=10;ctx.beginPath();ctx.arc(350,300,105,0,Math.PI*2);ctx.arc(650,300,105,0,Math.PI*2);ctx.stroke();
     arrow(ctx,350-Math.cos(angle)*75,300+Math.sin(angle)*75,350+Math.cos(angle)*75,300-Math.sin(angle)*75,"#ffdc8b","偏振軸");ctx.fillStyle="#58e0d3";ctx.fillRect(700,405,Math.max(4,amp*150),28);label(ctx,`I/I₀ = cos²${value}°`,650,460,"#a1fff5",18);if(revealed)evidenceCaption(ctx,"兩偏振軸互相垂直時，理想透射強度降為 0");return;
   }
   ctx.strokeStyle="#8e8bff";ctx.lineWidth=7;ctx.beginPath();for(let i=0;i<=180;i++){const t=i/180,x=start+(end-start)*t,y=cy-100*Math.sin(t*Math.PI*4);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();
@@ -1202,12 +1269,14 @@ function drawEMWaveEvidence(ctx, type, value, revealed) {
   if(revealed)evidenceCaption(ctx,type.includes("wavelength")?"f = 100 MHz：λ = c/f = 3.0 m":"交流電流每半週反向；電磁波的 E、B 與傳播方向互相垂直");
 }
 
-function drawQuantumEvidence(ctx, type, value, revealed) {
+function drawQuantumEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   if(type.includes("electron")) {
     ctx.strokeStyle="#dce6f2";ctx.lineWidth=8;ctx.strokeRect(180,185,640,235);
     ctx.fillStyle="#8e8bff";ctx.fillRect(215,220,22,165);ctx.fillStyle="#ff806b";ctx.fillRect(763,220,22,165);
     label(ctx,"陰極 −",190,165,"#d8c8ff",18);label(ctx,"陽極 +",735,165,"#ffb6ac",18);
-    const bend=Number(value)*30;ctx.strokeStyle="#73c8ff";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(240,305);ctx.quadraticCurveTo(500,305-bend,755,305-bend);ctx.stroke();
+    const bend=domain.deflectionFactor*30;ctx.strokeStyle="#73c8ff";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(240,305);ctx.quadraticCurveTo(500,305-bend,755,305-bend);ctx.stroke();
     arrow(ctx,470,305-bend*.55,650,305-bend,"#73c8ff","電子速度");forceArrow(ctx,500,305-bend*.7,500,245-bend*.7,"#ff806b","電力 qE");
     if(revealed)evidenceCaption(ctx,"箭尾在電子受力位置；帶負電電子的受力方向與電場方向相反");
     return;
@@ -1249,7 +1318,9 @@ function drawQuantumEvidence(ctx, type, value, revealed) {
   if(revealed)evidenceCaption(ctx,type.includes("spectrum")?"n=3 → 2｜1.89 eV｜656 nm":type.includes("atom")?"現代原子：離散能階 + 機率分布":"能量以 hf 的離散份額交換");
 }
 
-function drawNuclearEvidence(ctx, type, value, revealed) {
+function drawNuclearEvidence(ctx, type, evidence, revealed) {
+  const domain = evidence.domainEvidence.observable;
+  const value = domain.controlValue;
   const cx=500,cy=290,foundation=!type.includes("calc");
   if(type.includes("core")&&foundation){
     const spacing=Math.max(1,Number(value)),points=[];for(let i=0;i<12;i++){const a=i*2.4,r=(18+(i%4)*22)*spacing*.72;points.push([cx+Math.cos(a)*r,cy+Math.sin(a)*r]);}

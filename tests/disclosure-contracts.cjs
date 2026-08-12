@@ -59,6 +59,9 @@ for (const level of auditedLevels) {
 const byCode = Object.fromEntries(auditedLevels.map(level => [level.code, level]));
 const auditedFoundation = data.temples.flatMap(temple => temple.tracks.foundation);
 for (const level of auditedFoundation) {
+  const previewEvidence = physics.deriveEvidenceState(level, { phase: "preview", value: level.control.target });
+  assert.equal(previewEvidence.observed, false, `${level.code}: preview must not be certified as an observation`);
+  assert.equal(previewEvidence.previewActive, true, `${level.code}: preview must retain a separate live-control phase`);
   const evidence = physics.deriveEvidenceState(level, { phase: "evidence", value: level.control.target });
   const conclusion = physics.deriveQualitativeConclusion(level, evidence);
   const correctLabel = level.prediction.options.find(item => item.value === conclusion.prediction).label;
@@ -74,6 +77,21 @@ assert.doesNotMatch(texts(byCode["G-A4"], { phase: "pre-plan" }), /1000 N/);
 assert.doesNotMatch(texts(byCode["P-A1"], { phase: "pre-plan" }), /3\.1 eV/);
 assert.doesNotMatch(texts(byCode["O-F1"], { phase: "pre-plan", value: 60 }), /反射光/);
 assert.doesNotMatch(texts(byCode["B-F2"], { phase: "pre-plan", value: 4 }), /F_B/);
+
+const previewLeakChecks = {
+  "U-F1": /63\s*g|電子秤讀值/,
+  "U-F3": /游標卡尺|最小刻度.*不確定度/,
+  "U-F4": /同一小數位|誠實位數/,
+  "RES-F2": /節點：振幅|腹點.*最大/,
+  "O-F3": /全反射|臨界角/,
+  "NUC-F2": /A.?[−-]4|Z.?[−-]2|α.*衰變/,
+  "C-F2": /會合時間|碰撞|安全通過/,
+  "H-F2": /週期變長|速率.*縮短/,
+  "NWT-F4": /水平速度不變|vₓ.*固定/
+};
+for (const [code, leakPattern] of Object.entries(previewLeakChecks)) {
+  assert.doesNotMatch(texts(byCode[code], { phase: "preview", value: byCode[code].control.target }), leakPattern, `${code}: preview leaks the assessed conclusion before the apparatus runs`);
+}
 
 const waveLevel = byCode["W-F1"];
 const slow = physics.deriveWaveEvidence(waveLevel, { phase: "evidence", value: 2 });
@@ -104,14 +122,36 @@ assert.equal(criticalWrongEntry.optics.studentAngle, 70, "O-A2 must retain the p
 const chronoMeet = physics.deriveEvidenceState(byCode["C-F2"], { phase: "evidence", value: 6 }).chrono;
 assert.equal(chronoMeet.contractId, "chrono.meet");
 assert.ok(Math.abs(chronoMeet.meetingTime - 6) < 1e-9);
-const chronoBrake = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 50 } }).chrono;
+const upstreamEvidence = {
+  "chrono.meet.entrySpeed": { value: 20, evidenceVersionId: "C-A3:evidence:handoff", status: "supported" },
+  "chrono.meet.availableDistance": { value: 50, evidenceVersionId: "C-A3:evidence:handoff", status: "supported" }
+};
+const chronoBrakeEvidence = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 50 }, upstreamEvidence });
+const chronoBrake = chronoBrakeEvidence.chrono;
 assert.equal(chronoBrake.contractId, "chrono.brake");
 assert.ok(Math.abs(chronoBrake.stopPosition - 50) < 1e-9);
 assert.equal(chronoBrake.conclusion, "safe_stop");
+assert.match(chronoBrakeEvidence.evidenceVersionId, /^ev:C-A4:/);
+assert.equal(chronoBrakeEvidence.dependencyResolution.status, "supported");
+assert.equal(chronoBrakeEvidence.causalMutationCase.changed, true, "Chrono brake must prove that changing deceleration changes the outcome");
+const missingUpstream = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 50 } });
+assert.equal(missingUpstream.dependencyResolution.status, "upstream_inconclusive", "Chrono brake must not silently invent missing upstream evidence");
+assert.equal(missingUpstream.certified, false, "inconclusive upstream evidence cannot certify a downstream result");
+const staleUpstream = physics.deriveEvidenceState(byCode["C-A4"], {
+  phase: "evidence",
+  values: { distance: 50 },
+  upstreamEvidence,
+  dependencyVersionSnapshot: {
+    "chrono.meet.entrySpeed": "old-version",
+    "chrono.meet.availableDistance": "C-A3:evidence:handoff"
+  }
+});
+assert.equal(staleUpstream.dependencyResolution.status, "upstream_inconclusive", "stale Chrono dependencies must be marked honestly");
 
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
 assert.match(app, /physics\.interferenceAt\(px,py,wave\.params\)/, "wave renderer must consume the domain model, not fixed decoration");
 assert.doesNotMatch(app, /第一步｜鎖定質性預測|第二步｜操作變因並取得證據|第三步｜用證據選出理由/);
 assert.doesNotMatch(app, />鎖定預測<|預測已鎖定|結果不會在預測前顯示/);
+assert.doesNotMatch(app, /外軌道：速率與引力箭長同步縮短|vₓ（固定）/, "conclusion-bearing geometry labels must not be unconditional renderer strings");
 
-console.log(`Disclosure contracts: all ${auditedLevels.length} levels reviewed claim-by-claim, including ${auditedFoundation.length} map/brief/known layers; water, magnetic and optics causal mutations guarded`);
+console.log(`Disclosure contracts: all ${auditedLevels.length} levels reviewed claim-by-claim, including ${auditedFoundation.length} preview layers; water, magnetic, optics and Chrono causal mutations guarded`);

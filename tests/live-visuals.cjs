@@ -54,4 +54,9 @@ for (const level of variableLevels) {
   );
 }
 
+const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
+for (const family of ["Momentum", "Energy", "Electric", "Magnetic", "Optics", "Thermal", "Celestial", "Newton", "Resonance", "EMWave", "Quantum", "Nuclear"]) {
+  assert.match(app, new RegExp(`draw${family}Evidence\\(ctx, type, evidence`), `${family} renderer must consume the shared domain evidence instead of a parallel raw value`);
+}
+
 console.log(`Live visual contracts: ${variableLevels.length} variable foundation levels redraw at their target value`);

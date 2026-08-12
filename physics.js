@@ -188,7 +188,7 @@
     "newton-net": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "fma"],
     "newton-friction": () => ["match", "balance"],
     "newton-projectile": () => ["components", "gravity-vertical"],
-    "resonance-pitch": (level, evidence) => [evidence.value > level.control.base ? "higher" : "same", "loudness"],
+    "resonance-pitch": (level, evidence) => [evidence.value > level.control.base ? "higher" : "same", "frequency-count"],
     "resonance-standing": () => ["still", "max"],
     "resonance-match": () => ["peak", "resonance"],
     "resonance-tube": () => ["node", "antinode"],
@@ -226,9 +226,11 @@
 
   function evaluateAdvanced(level, evidence, selectedModel, values) {
     const results = checkInputs({ inputs: evidence.expectedInputs }, values);
+    const upstreamOK = evidence.dependencyResolution?.status !== "upstream_inconclusive";
     return {
       modelOK: selectedModel === evidence.expectedModel,
-      valuesOK: results.every(result => result.ok),
+      valuesOK: upstreamOK && results.every(result => result.ok),
+      upstreamOK,
       results,
       evidenceVersion: evidence.version
     };
@@ -350,6 +352,11 @@
     if (Number.isFinite(evidence.optics?.critical)) observations.push(`臨界角=${Number(evidence.optics.critical.toFixed(2))}°`);
     if (evidence.chrono?.contractId === "chrono.meet") observations.push(evidence.chrono.meetingTime === null ? "時限內未相遇" : `會合時間=${Number(evidence.chrono.meetingTime.toFixed(2))} s`);
     if (evidence.chrono?.contractId === "chrono.brake") observations.push(`停止位置=${Number(evidence.chrono.stopPosition.toFixed(2))} m`);
+    if (evidence.dependencyResolution?.status === "upstream_inconclusive") observations.push("上游軌跡不足，暫不形成結論");
+    if (!observations.length && evidence.domainEvidence) {
+      const value = evidence.domainEvidence.observable.controlValue;
+      if (Number.isFinite(value)) observations.push(`控制量=${Number(value.toFixed(3))}`);
+    }
     return `${contract.explanation}${observations.length ? ` 本次機關狀態：${observations.join("；")}。` : ""}`;
   }
 
@@ -375,7 +382,8 @@
     const type = level.visual;
     const state = {
       phase,
-      observed: phase === "preview" || phase === "evidence",
+      observed: phase === "evidence",
+      previewActive: phase === "preview",
       certified: phase === "evidence" && condition.valuesOK !== false,
       sources: 1,
       amplitude: 1,
@@ -413,12 +421,183 @@
     return state;
   }
 
+  const titanVisuals = new Set(["pivot", "lever-distance", "force-direction", "posture", "biceps", "triceps", "deadlift", "achilles"]);
+
+  function familyForLevel(level) {
+    const visual = level.visual || "";
+    if (titanVisuals.has(visual)) return "titans";
+    if (level.code?.startsWith("C-")) return "chrono";
+    if (visual.startsWith("photo-")) return "photo";
+    if (visual.startsWith("wave-")) return "ripple";
+    if (visual.startsWith("measure-") || visual.startsWith("uncertainty-")) return "uncertainty";
+    for (const family of ["momentum", "energy", "electric", "magnetic", "optics", "thermal", "celestial", "newton", "resonance", "emwave", "quantum", "nuclear"]) {
+      if (visual.startsWith(`${family}-`)) return family;
+    }
+    throw new Error(`No temple family for ${level.code} (${visual})`);
+  }
+
+  function normalizeControl(level, value) {
+    if (!level.control) return 0;
+    const min = Number(level.control.min), max = Number(level.control.max);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || max === min) return 0;
+    return Math.max(0, Math.min(1, (value - min) / (max - min)));
+  }
+
+  function deriveFamilyObservable(level, evidence) {
+    const value = evidence.value;
+    const base = Number(level.control?.base ?? value);
+    const observable = {
+      controlValue: value,
+      controlBase: base,
+      controlTarget: Number(level.control?.target ?? value),
+      normalizedControl: normalizeControl(level, value),
+      candidateValues: { ...evidence.values }
+    };
+    const family = familyForLevel(level);
+    if (family === "titans") {
+      observable.momentArm = value;
+      observable.torqueFactor = level.visual === "force-direction" ? Math.sin(deg(value)) : value / Math.max(1, base);
+      observable.muscleLoadRatio = level.visual === "posture" ? value / 5 : null;
+    } else if (family === "photo") {
+      observable.photonEnergy = value;
+      observable.thresholdCrossed = value > base;
+      observable.relativePhotonCount = level.visual === "photo-intensity" ? value / Math.max(1, base) : 1;
+    } else if (family === "ripple") {
+      observable.wavelength = evidence.wave.observable.wavelength;
+      observable.centerIntensity = evidence.wave.observable.centerIntensity;
+      observable.sources = evidence.wave.sources;
+    } else if (family === "uncertainty") {
+      observable.instrumentReading = level.visual === "measure-scale" ? 63 : null;
+      observable.resolution = level.visual === "measure-tool" ? value : null;
+      observable.sampleSpread = level.visual === "measure-scatter" ? value : null;
+    } else if (family === "momentum") {
+      observable.impulseFactor = level.visual.includes("impulse") ? value : 1;
+      observable.forceFactor = level.visual.includes("cushion") ? 1 / Math.max(.001, value) : 1;
+    } else if (family === "energy") {
+      observable.workFactor = level.visual.includes("work") ? Math.cos(deg(value)) : 1;
+      observable.energyFactor = level.visual.includes("power") ? 1 / Math.max(.001, value) : value / Math.max(1, base);
+    } else if (family === "electric") {
+      observable.chargeSign = Math.sign(value) || 1;
+      observable.fieldFactor = level.visual.includes("field") ? 1 / Math.max(.001, value * value) : 1;
+      observable.branchCount = level.visual.includes("parallel") ? Math.max(1, Math.round(value)) : 1;
+    } else if (family === "magnetic") {
+      observable.field = evidence.magnetic.field;
+      observable.force = evidence.magnetic.force;
+      observable.trajectory = evidence.magnetic.trajectory;
+    } else if (family === "optics") {
+      observable.incidence = evidence.optics.incidence;
+      observable.reflection = evidence.optics.reflection;
+      observable.refraction = evidence.optics.refraction;
+      observable.critical = evidence.optics.critical;
+      observable.imageDistance = evidence.optics.imageDistance;
+    } else if (family === "thermal") {
+      observable.temperatureFactor = value / Math.max(1, base);
+      observable.pressureFactor = level.visual.includes("gas") ? value / 300 : null;
+      observable.temperatureDifference = level.visual.includes("flow") ? Math.max(0, 60 - 12 * value) : null;
+    } else if (family === "celestial") {
+      observable.radiusFactor = value / Math.max(1, base);
+      observable.gravityFactor = level.visual.includes("gravity") ? 1 / Math.max(.001, observable.radiusFactor ** 2) : null;
+      observable.orbitalSpeedFactor = 1 / Math.sqrt(Math.max(.001, observable.radiusFactor));
+    } else if (family === "newton") {
+      observable.netForce = level.visual.includes("inertia") ? value : value - base;
+      observable.horizontalVelocity = level.visual.includes("projectile") ? 1 : null;
+      observable.verticalVelocityFactor = level.visual.includes("projectile") ? value : null;
+    } else if (family === "resonance") {
+      observable.frequencyFactor = value / Math.max(1, base);
+      observable.relativeAmplitude = level.visual.includes("match") ? 1 / (1 + (value - Number(level.control?.max ?? value)) ** 2 * 1.6) : null;
+      observable.harmonic = level.visual.includes("pitch") ? Math.max(1, value) : null;
+    } else if (family === "emwave") {
+      observable.changeRate = value / Math.max(1, base);
+      observable.polarizedIntensity = level.visual.includes("polarization") ? Math.cos(deg(value)) ** 2 : null;
+    } else if (family === "quantum") {
+      observable.deflectionFactor = level.visual.includes("electron") ? value : null;
+      observable.energyLevel = level.visual.includes("atom") ? value : null;
+      observable.quantumCount = level.visual.includes("charge") ? Math.round(value) : null;
+    } else if (family === "nuclear") {
+      observable.separationFactor = value / Math.max(1, base);
+      observable.remainingFraction = level.visual.includes("halflife") ? .5 ** value : null;
+      observable.decayDelta = level.visual.includes("radiation") ? { massNumber: -4, atomicNumber: -2 } : null;
+    } else if (family === "chrono") {
+      observable.contract = evidence.chrono;
+      observable.meetingTime = evidence.chrono?.meetingTime ?? null;
+      observable.stopPosition = evidence.chrono?.stopPosition ?? null;
+    }
+    return observable;
+  }
+
+  function stableRecord(value) {
+    if (Array.isArray(value)) return value.map(stableRecord);
+    if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map(key => [key, stableRecord(value[key])]));
+    return value;
+  }
+
+  function resolveDependencies(level, condition) {
+    const manifest = level.stateContract?.dependencyManifest || [];
+    const upstream = condition.upstreamEvidence || {};
+    const snapshot = condition.dependencyVersionSnapshot || {};
+    const entries = manifest.map(dependency => {
+      if (dependency.provenance === "scenario_constraint") return { ...dependency, status: "supported" };
+      const source = upstream[dependency.valueRef];
+      const expectedVersion = snapshot[dependency.valueRef];
+      const versionMatches = !expectedVersion || source?.evidenceVersionId === expectedVersion;
+      return {
+        ...dependency,
+        value: source?.value,
+        evidenceVersionId: source?.evidenceVersionId,
+        status: source?.status === "supported" && versionMatches ? "supported" : "upstream_inconclusive",
+        reason: !source ? "missing_upstream_evidence" : !versionMatches ? "stale_upstream_evidence" : source.status !== "supported" ? "unsupported_upstream_evidence" : null
+      };
+    });
+    return {
+      manifest,
+      entries,
+      status: entries.some(entry => entry.status === "upstream_inconclusive") ? "upstream_inconclusive" : "supported"
+    };
+  }
+
+  function deriveCausalMutationCase(level, evidence) {
+    if (!evidence.chrono) return null;
+    const baseline = evidence.chrono;
+    let mutation;
+    if (baseline.contractId === "chrono.brake") {
+      mutation = chronoBrake({
+        initialSpeed: baseline.initialSpeed,
+        deceleration: Math.max(.1, baseline.deceleration * 1.25),
+        brakeStart: baseline.brakeStart,
+        gatePosition: baseline.gatePosition,
+        duration: baseline.duration
+      });
+      return {
+        variable: "deceleration",
+        baseline: baseline.stopPosition,
+        mutated: mutation.stopPosition,
+        changed: Math.abs(baseline.stopPosition - mutation.stopPosition) > 1e-9,
+        baselineConclusion: baseline.conclusion,
+        mutatedConclusion: mutation.conclusion
+      };
+    }
+    mutation = chronoMeeting({
+      first: baseline.first,
+      second: { ...baseline.second, v0: baseline.second.v0 + Math.max(.5, Math.abs(baseline.second.v0) * .1) },
+      duration: baseline.duration
+    });
+    return {
+      variable: "relativeSpeed",
+      baseline: baseline.meetingTime,
+      mutated: mutation.meetingTime,
+      changed: baseline.meetingTime !== mutation.meetingTime,
+      baselineConclusion: baseline.conclusion,
+      mutatedConclusion: mutation.conclusion
+    };
+  }
+
   function deriveEvidenceState(level, condition = {}) {
     const phase = condition.phase || (condition.revealed ? "evidence" : condition.preview ? "preview" : "pre-plan");
     const values = Object.fromEntries(Object.entries(condition.values || {}).map(([key, raw]) => [key, Number(raw)]));
     const evidence = {
       phase,
-      observed: phase === "preview" || phase === "evidence",
+      observed: phase === "evidence",
+      previewActive: phase === "preview",
       certified: phase === "evidence" && condition.valuesOK !== false,
       value: Number(condition.value ?? level.control?.base ?? 0),
       values,
@@ -476,6 +655,27 @@
       else if (level.visual === "chase" || level.visual === "chrono-delay") evidence.chrono = chronoMeeting({ first: { x0: 40, v0: 4, a: 0 }, second: { x0: 0, v0: level.visual === "chrono-delay" ? 8 : 4 + evidence.value, a: 0 }, duration: 12 });
       else evidence.chrono = chronoMeeting({ first: { x0: 0, v0: 3, a: 0 }, second: { x0: 0, v0: level.visual === "chrono-accel" ? 0 : Math.max(1, evidence.value), a: level.visual === "chrono-accel" ? 2 : 0 }, duration: 10 });
     }
+    evidence.evidenceVersionId = `ev:${level.code}:${JSON.stringify(stableRecord({ phase, value: evidence.value, values }))}`;
+    evidence.version = evidence.evidenceVersionId;
+    evidence.dependencyResolution = resolveDependencies(level, condition);
+    if (evidence.dependencyResolution.status === "upstream_inconclusive") evidence.certified = false;
+    evidence.causalMutationCase = deriveCausalMutationCase(level, evidence);
+    evidence.domainEvidence = {
+      family: familyForLevel(level),
+      contractId: evidence.contractId,
+      evidenceVersionId: evidence.evidenceVersionId,
+      phase,
+      observed: evidence.observed,
+      previewActive: evidence.previewActive,
+      certified: evidence.certified,
+      observable: deriveFamilyObservable(level, evidence)
+    };
+    if (level.code === "C-A3" && phase === "evidence" && evidence.certified) {
+      evidence.handoffEvidence = {
+        "chrono.meet.entrySpeed": { value: 20, evidenceVersionId: evidence.evidenceVersionId, status: "supported" },
+        "chrono.meet.availableDistance": { value: 50, evidenceVersionId: evidence.evidenceVersionId, status: "supported" }
+      };
+    }
     if (level.prediction) evidence.conclusion = deriveQualitativeConclusion(level, evidence);
     if (level.inputs) {
       evidence.expectedModel = deriveAdvancedModel(level);
@@ -508,6 +708,7 @@
     interferenceAt,
     singleWaveAt,
     deriveWaveEvidence,
+    familyForLevel,
     deriveEvidenceState,
     deriveQualitativeConclusion,
     evaluateFoundation,

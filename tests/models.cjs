@@ -7,6 +7,16 @@ assert.deepEqual(data.totals, { foundation: 68, advanced: 69 });
 assert.equal(data.version, "5.1.0");
 assert.match(data.world.premise, /十七座神殿/);
 
+for (const temple of data.temples) {
+  for (const level of [...temple.tracks.foundation, ...temple.tracks.advanced]) {
+    const condition = level.inputs ? { phase: "pre-plan", values: {} } : { phase: "pre-plan", value: level.control.base };
+    const evidence = physics.deriveEvidenceState(level, condition);
+    assert.equal(evidence.domainEvidence.family, temple.id, `${level.code}: renderer, evaluator and explanation need one ${temple.id} domain state`);
+    assert.equal(evidence.domainEvidence.contractId, level.stateContract.contractId, `${level.code}: domain state must identify the assessed contract`);
+    assert.ok(evidence.domainEvidence.observable, `${level.code}: domain state must expose renderable observables`);
+  }
+}
+
 assert.ok(Math.abs(physics.tricepsWeight(300, 5, 30, 150) - 100) < 1e-9);
 assert.ok(Math.abs(physics.deadliftWeight(2250, 8, 300, 40, 60) - 100) < 1e-9);
 assert.ok(Math.abs(physics.achillesNormalForce(3000, 5, 15) - 1000) < 1e-9);
@@ -42,6 +52,13 @@ const projectile = data.temples.find(t => t.id === "newton").tracks.advanced[3];
 assert.deepEqual(physics.solveAdvanced(projectile).map(field => field.answer), [3, 60]);
 const closedTube = data.temples.find(t => t.id === "resonance").tracks.advanced[2];
 assert.equal(physics.solveAdvanced(closedTube)[0].answer, 200);
+const pitchLevel = data.temples.find(t => t.id === "resonance").tracks.foundation[0];
+const pitchEvidence = physics.deriveEvidenceState(pitchLevel, { phase: "evidence", value: pitchLevel.control.target });
+assert.deepEqual(
+  { prediction: pitchEvidence.conclusion.prediction, reason: pitchEvidence.conclusion.reason },
+  { prediction: "higher", reason: "frequency-count" },
+  "RES-F1 must justify higher pitch with increased oscillations per second, not with loudness"
+);
 const transformer = data.temples.find(t => t.id === "emwave").tracks.advanced[1];
 assert.equal(physics.solveAdvanced(transformer)[0].answer, 24);
 const hydrogen = data.temples.find(t => t.id === "quantum").tracks.advanced[3];
