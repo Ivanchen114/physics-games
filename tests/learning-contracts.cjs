@@ -10,22 +10,22 @@ for (const temple of data.temples) {
     assert.ok(level.prediction && level.reason && level.control, `${level.code} foundation loop incomplete`);
     assert.equal(level.models, undefined, `${level.code} must not require advanced model selection`);
     assert.equal(level.inputs, undefined, `${level.code} must not require numeric calculation`);
-    assert.ok(level.assessedClaim && level.observableSchema && level.modelId, `${level.code} missing state contract`);
+    assert.ok(level.assessedClaim && level.observableSchema && level.modelId && level.stateContract, `${level.code} missing state contract`);
   }
   for (const level of temple.tracks.advanced) {
     codes.push(level.code);
     assert.ok(level.models.length >= 3, `${level.code} needs model alternatives`);
     assert.ok(level.inputs.length >= 1, `${level.code} needs calculable output`);
-    assert.ok(level.inputs.every(field => Number.isFinite(field.answer)), `${level.code} missing reference answer`);
-    assert.ok(level.assessedClaim && level.observableSchema && level.modelId, `${level.code} missing state contract`);
+    assert.ok(level.stateContract.outputSchema.every(field => field.id && Number.isFinite(field.tolerance)), `${level.code} missing output schema`);
+    assert.ok(level.assessedClaim && level.observableSchema && level.modelId && level.stateContract, `${level.code} missing state contract`);
   }
 }
 assert.equal(new Set(codes).size, 137);
 
 const water = data.temples.find(t => t.id === "ripple");
-assert.match(water.tracks.foundation[0].explanation, /頻率增加，波長縮短/);
-assert.match(water.tracks.foundation[1].explanation, /只改振幅不會改變/);
-assert.match(water.tracks.foundation[3].explanation, /干涉線數通常增加/);
+assert.match(water.tracks.foundation[0].stateContract.explanation, /頻率增加，波長縮短/);
+assert.match(water.tracks.foundation[1].stateContract.explanation, /只改振幅不會改變/);
+assert.match(water.tracks.foundation[3].stateContract.explanation, /干涉線數通常增加/);
 assert.match(water.tracks.advanced[2].known.join(" "), /完整平面/);
 
 for (const temple of data.temples) {

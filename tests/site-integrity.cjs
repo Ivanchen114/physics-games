@@ -32,7 +32,8 @@ for (const temple of data.temples) {
 }
 
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
-for (const contract of ["判斷已封存", "舊證據已失效", "law-temple-v3-\\$\\{name\\}-completed", "law-temple-v3-\\$\\{track\\}-completed"]) assert.match(app, new RegExp(contract));
+for (const contract of ["選擇已刻下", "剛才的痕跡已不再代表現在的狀態", "law-temple-v3-\\$\\{name\\}-completed", "law-temple-v3-\\$\\{track\\}-completed"]) assert.match(app, new RegExp(contract));
+for (const labPhrase of ["判斷已封存", "舊證據已失效", "顯示轉動證據", "提交解釋", "驗證模型"]) assert.doesNotMatch(app, new RegExp(labPhrase));
 assert.match(app, /drawWaveVisual/);
 assert.match(app, /drawTitanVisual/);
 assert.match(app, /drawChronoVisual/);

@@ -232,36 +232,36 @@ function stageSession() {
 function foundationChallenge(level) {
   const evidenceStep = level.control.kind === "reveal"
     ? `<div class="control-step" data-control-step>
-      <p class="step-label">讓石臂動起來</p>
-      <p class="question">顯示前臂繞肘關節轉動的物理證據。</p>
+      <p class="step-label">喚醒石臂</p>
+      <p class="question">讓沉睡的石臂完成一次轉動。</p>
       <input id="level-control" type="hidden" value="${level.control.target}" data-control>
-      <button type="button" class="primary-button" data-run>顯示轉動證據</button>
+      <button type="button" class="primary-button" data-run>喚醒石臂</button>
     </div>`
     : `<div class="control-step" data-control-step>
-      <p class="step-label">調整機關，留下這次痕跡</p>
+      <p class="step-label">親手試一次</p>
       <div class="slider-head"><span class="control-label">${level.control.label}</span><output data-readout>${formatControlValue(level.control.base)} ${level.control.unit}</output></div>
       ${controlMarkup(level.control)}
       <div class="live-observation" data-live-observation aria-live="polite">
-        <span>即時視覺回饋</span><strong data-live-text></strong>
+        <span>機關回應</span><strong data-live-text></strong>
         <i aria-hidden="true"><b data-live-meter></b></i>
       </div>
-      <p class="target-note">把控制調到 <strong>${formatControlValue(level.control.target)} ${level.control.unit}</strong>，再啟動機關。</p>
-      <button type="button" class="primary-button" data-run>啟動機關</button>
+      <p class="target-note">把控制調到 <strong>${formatControlValue(level.control.target)} ${level.control.unit}</strong>，再讓機關運轉。</p>
+      <button type="button" class="primary-button" data-run>讓機關運轉</button>
     </div>`;
   return `<section class="challenge-card">
     <div class="prediction-step">
       <p class="step-label">先說你認為會發生什麼</p><p class="question">${level.prediction.question}</p>
       <div class="choices" data-predictions>${choiceButtons(level.prediction.options, "prediction")}</div>
-      <div class="action-row"><span class="attempts" data-attempts>尚未啟動機關</span><button type="button" class="primary-button" data-lock disabled>封存判斷</button></div>
+      <div class="action-row"><span class="attempts" data-attempts>機關仍在等待</span><button type="button" class="primary-button" data-lock disabled>就押這個</button></div>
     </div>
     <hr class="phase-divider">
     ${evidenceStep}
     <div class="reason-step" data-reason-step>
       <hr class="phase-divider"><p class="step-label">把剛才看見的事說清楚</p><p class="question">${level.reason.question}</p>
       <div class="choices" data-reasons>${choiceButtons(level.reason.options, "reason")}</div>
-      <button type="button" class="primary-button" data-submit-reason disabled>提交解釋</button>
+      <button type="button" class="primary-button" data-submit-reason disabled>告訴守護者</button>
     </div>
-    <div class="feedback" data-feedback aria-live="polite">先封存你的判斷；機關結果會在啟動後顯示。</div>
+    <div class="feedback" data-feedback aria-live="polite">先選一種可能；機關會等你決定後才運轉。</div>
   </section>`;
 }
 
@@ -278,6 +278,15 @@ function controlMarkup(control) {
 
 function formatControlValue(value) {
   return String(Number(Number(value).toPrecision(12)));
+}
+
+function formatModelValue(value, tolerance = 0) {
+  const numeric = Number(value);
+  const margin = Math.abs(Number(tolerance));
+  if (!Number.isFinite(numeric)) return "—";
+  if (!Number.isFinite(margin) || margin <= 0) return formatControlValue(numeric);
+  const decimals = Math.max(0, Math.min(6, Math.ceil(-Math.log10(margin))));
+  return numeric.toFixed(decimals);
 }
 
 function updateLiveObservation(level, value) {
@@ -322,14 +331,14 @@ function liveObservation(level, value) {
 
 function advancedChallenge(level) {
   return `<section class="challenge-card">
-    <p class="step-label">選一條能讓機關成立的法則</p><p class="question">哪一個模型適用於這道機關？</p>
+    <p class="step-label">從碑文中選一條法則</p><p class="question">哪一條關係能讓這道機關成立？</p>
     <div class="choices model-choices" data-models>${choiceButtons(level.models, "model")}</div>
     <div class="calculation-step" data-calculation-step>
       <hr class="phase-divider"><p class="step-label">把你的數值刻入機關</p>
       <div class="number-grid">${level.inputs.map(field => `<label class="number-field">${field.label}<div><input data-answer="${field.id}" type="number" inputmode="decimal" step="any" aria-label="${field.label}"><span>${field.unit}</span></div></label>`).join("")}</div>
-      <div class="action-row"><span class="attempts" data-attempts>尚未驗證</span><button type="button" class="primary-button" data-verify>驗證模型</button></div>
+      <div class="action-row"><span class="attempts" data-attempts>刻印仍未回應</span><button type="button" class="primary-button" data-verify>啟動刻印</button></div>
     </div>
-    <div class="feedback" data-feedback aria-live="polite">先選模型，數值輸入才會解鎖。</div>
+    <div class="feedback" data-feedback aria-live="polite">先選一條法則，石碑才會接受你的數值。</div>
   </section>`;
 }
 
@@ -355,7 +364,7 @@ function bindFoundation(level, index) {
   }));
   lock.addEventListener("click", () => {
     sound("lock");
-    lock.textContent = "判斷已封存";
+    lock.textContent = "選擇已刻下";
     lock.disabled = true;
     main.querySelectorAll("[data-prediction]").forEach(button => { button.disabled = true; });
     episodeTrace.comparisonPlan = {
@@ -371,8 +380,8 @@ function bindFoundation(level, index) {
       drawVisual(level, { value: Number(controlInput.value), phase: "preview" });
     }
     feedback.textContent = level.control.kind === "reveal"
-      ? "判斷已封存。請顯示轉動證據。"
-      : `判斷已封存。請把${level.control.label}調到目標值，再啟動機關。`;
+      ? "選擇已刻下。現在喚醒石臂。"
+      : `選擇已刻下。請把${level.control.label}調到目標值，再讓機關運轉。`;
   });
   controlInput.addEventListener("input", () => {
     const readout = main.querySelector("[data-readout]");
@@ -385,10 +394,10 @@ function bindFoundation(level, index) {
       reasonStep.classList.remove("visible");
       selectedReason = null;
       feedback.className = "feedback";
-      feedback.textContent = "設定已改變，舊證據已失效；圖像仍會即時預覽。請重新啟動機關鎖定新證據。";
+      feedback.textContent = "你改動了機關；剛才的痕跡已不再代表現在的狀態。請重新運轉一次。";
     } else {
       feedback.className = "feedback";
-      feedback.textContent = "圖像已隨控制值即時更新；調到目標後啟動機關，鎖定這次證據。";
+      feedback.textContent = "機關正在回應你的調整；調到目標後，讓它完整運轉一次。";
     }
     drawVisual(level, { value: Number(controlInput.value), phase: "preview" });
   });
@@ -405,10 +414,10 @@ function bindFoundation(level, index) {
   main.querySelector("[data-run]").addEventListener("click", () => {
     const value = Number(controlInput.value);
     attempts += 1;
-    updateAttempts("已啟動", attempts);
+    updateAttempts("已運轉", attempts);
     if (!physics.nearly(value, level.control.target, Math.max(Number(level.control.step) / 2, .001))) {
       feedback.className = "feedback bad";
-      feedback.textContent = `控制值還不是目標 ${formatControlValue(level.control.target)} ${level.control.unit}；先調整再啟動。`;
+      feedback.textContent = `控制值還不是目標 ${formatControlValue(level.control.target)} ${level.control.unit}；先調整再運轉。`;
       return;
     }
     evidenceValid = true;
@@ -423,7 +432,8 @@ function bindFoundation(level, index) {
     drawVisual(level, { value, phase: "evidence" });
     reasonStep.classList.add("visible");
     feedback.className = "feedback";
-    feedback.textContent = selectedPrediction === level.prediction.correct ? "證據已出現，而且與你原先的判斷一致。現在選出因果理由。" : "證據已出現，但和你原先的判斷不同。仍請先根據證據判斷原因。";
+    const outcome = physics.evaluateFoundation(level, episodeTrace.evidenceRun.observable, selectedPrediction, null);
+    feedback.textContent = outcome.predictionOK ? "機關留下的痕跡與你原先的想法一致。現在說明原因。" : "機關的回應和你原先想的不一樣。看看痕跡，再選出原因。";
   });
   main.querySelectorAll("[data-reason]").forEach(button => button.addEventListener("click", () => {
     sound("select");
@@ -433,10 +443,10 @@ function bindFoundation(level, index) {
   }));
   main.querySelector("[data-submit-reason]").addEventListener("click", () => {
     if (!evidenceValid) return;
-    const predictionOK = selectedPrediction === level.prediction.correct;
-    const reasonOK = selectedReason === level.reason.correct;
-    markChoice("prediction", level.prediction.correct);
-    markChoice("reason", level.reason.correct);
+    const outcome = physics.evaluateFoundation(level, episodeTrace.evidenceRun.observable, selectedPrediction, selectedReason);
+    const { predictionOK, reasonOK } = outcome;
+    markChoice("prediction", outcome.expectedPrediction);
+    markChoice("reason", outcome.expectedReason);
     if (predictionOK && reasonOK) completeLevel(level, index, feedback);
     else {
       const damage = loseFlame(level);
@@ -462,7 +472,7 @@ function bindAdvanced(level, index) {
     episodeTrace.status = "plan-locked";
     if (evidenceValid) invalidateAdvanced(level, feedback);
     feedback.className = "feedback";
-    feedback.textContent = "模型已選擇。輸入數值後再啟動驗證；修改數值會讓舊證據失效。";
+    feedback.textContent = "法則已選定。刻入數值後啟動石碑；若再修改，石碑會重新計算。";
   }));
   main.querySelectorAll("[data-answer]").forEach(input => input.addEventListener("input", () => {
     if (evidenceValid) {
@@ -471,33 +481,34 @@ function bindAdvanced(level, index) {
       if (episodeTrace.evidenceRun) episodeTrace.evidenceRun.supersededBy = `${level.code}:pending`;
       drawVisual(level, { phase: "pre-plan" });
       feedback.className = "feedback";
-      feedback.textContent = "數值已改變，舊證據已失效。請重新驗證模型。";
+      feedback.textContent = "數值已改變；剛才的光紋不再代表這組刻印。請重新啟動石碑。";
     }
   }));
   main.querySelector("[data-verify]").addEventListener("click", () => {
     attempts += 1;
-    updateAttempts("已驗證", attempts);
+    updateAttempts("已啟動", attempts);
     const values = Object.fromEntries([...main.querySelectorAll("[data-answer]")].map(input => [input.dataset.answer, input.value]));
-    const results = physics.checkInputs(level, values);
-    const modelOK = selectedModel === level.correctModel;
-    const valuesOK = results.every(result => result.ok);
+    const proposedEvidence = physics.deriveEvidenceState(level, { phase: "evidence", values });
+    const outcome = physics.evaluateAdvanced(level, proposedEvidence, selectedModel, values);
+    const { results, modelOK, valuesOK } = outcome;
+    const evidence = physics.deriveEvidenceState(level, { phase: "evidence", values, modelOK, valuesOK });
     evidenceValid = true;
     episodeTrace.evidenceRun = {
       version: `${level.code}:${attempts}`,
       plan: episodeTrace.comparisonPlan,
       condition: values,
-      observable: physics.deriveEvidenceState(level, { phase: "evidence", values, modelOK, valuesOK })
+      observable: evidence
     };
     episodeTrace.status = modelOK && valuesOK ? "supported" : "contradicted";
     sound("evidence");
     drawVisual(level, { phase: "evidence", values, modelOK, valuesOK });
-    markChoice("model", level.correctModel);
+    markChoice("model", evidence.expectedModel);
     if (modelOK && valuesOK) completeLevel(level, index, feedback);
     else {
       const wrongFields = results.filter(result => !result.ok).map(result => level.inputs.find(field => field.id === result.id).label);
       const damage = loseFlame(level);
       feedback.className = "feedback bad";
-      feedback.innerHTML = `<strong>模型或數值尚未平衡。</strong><br>${modelOK ? "模型正確；請重算：" + wrongFields.join("、") : "先回到已知條件，確認你選的物理關係。"}<br>${damage}`;
+      feedback.innerHTML = `<strong>這組刻印還無法啟動機關。</strong><br>${modelOK ? "法則可行；請重算：" + wrongFields.join("、") : "先回到已知條件，換一條能連起它們的關係。"}<br>${damage}`;
     }
   });
 }
@@ -505,7 +516,7 @@ function bindAdvanced(level, index) {
 function invalidateAdvanced(level, feedback) {
   drawVisual(level, { revealed: false });
   feedback.className = "feedback";
-  feedback.textContent = "模型已改變，舊證據已失效。";
+  feedback.textContent = "你換了一條法則；剛才的光紋已熄滅。";
 }
 
 function selectOne(selector, selected) {
@@ -543,7 +554,8 @@ function completeLevel(level, index, feedback) {
   const trackEnding = index + 1 === levels.length ? `<br><strong>${route.label}完成：${track === "foundation" ? "觀測印" : "演算印"}已與 ${temple.relic} 共鳴。</strong>` : "";
   const rewardText = firstClear ? `<br><span class="reward-note">+${reward} 法則經驗・目前階級：${playerRank()}</span>` : `<br><span class="reward-note">重試完成，不重複計算經驗。</span>`;
   feedback.className = "feedback ok";
-  feedback.innerHTML = `<strong>法則刻印已取得。</strong><br>${level.explanation}${rewardText}${trackEnding}<br><button type="button" class="primary-button next-button" data-next>${index + 1 < levels.length ? "前往下一關" : "返回關卡地圖"}</button>`;
+  const explanation = physics.describeEvidence(level, episodeTrace.evidenceRun.observable);
+  feedback.innerHTML = `<strong>法則刻印已取得。</strong><br>${explanation}${rewardText}${trackEnding}<br><button type="button" class="primary-button next-button" data-next>${index + 1 < levels.length ? "前往下一關" : "返回關卡地圖"}</button>`;
   sound("success");
   if (firstClear) spawnSealBurst();
   main.querySelector("[data-next]").addEventListener("click", () => index + 1 < levels.length ? setLocation(levels[index + 1].code) : setLocation(null));
@@ -559,25 +571,78 @@ function drawVisual(level, state) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   const evidence = physics.deriveEvidenceState(level, state);
-  canvas.setAttribute?.("aria-label", evidence.phase === "pre-plan" ? `${level.title}的機關尚未啟動；${level.assessedClaim}` : evidence.phase === "preview" ? `${level.title}的可操作預覽；尚未封存正式證據` : `${level.title}的本次正式證據；${level.assessedClaim}`);
+  canvas.setAttribute?.("aria-label", evidence.phase === "pre-plan" ? `${level.title}的機關尚未啟動；${level.assessedClaim}` : evidence.phase === "preview" ? `${level.title}的可操作預覽；尚未完成一次運轉` : `${level.title}的本次機關痕跡；${level.assessedClaim}`);
   const value = evidence.value;
-  const revealed = evidence.phase === "evidence";
+  const observed = evidence.phase === "evidence";
+  const revealed = observed && evidence.certified;
   const preview = evidence.phase === "preview";
-  drawBasePlate(ctx, w, h, revealed ? "本次痕跡已封存" : preview ? "機關調整中" : "機關尚未啟動");
+  drawBasePlate(ctx, w, h, observed ? (evidence.certified ? "刻印與機關吻合" : "刻印與機關不合") : preview ? "機關調整中" : "機關尚未啟動");
   const type = level.visual;
+  if (evidence.phase === "pre-plan") {
+    drawDormantApparatus(ctx, level, evidence, w, h);
+    ctx.restore();
+    return;
+  }
   if (type.startsWith("wave-")) drawWaveVisual(ctx, type, value, revealed, w, h, evidence);
   else if (type.startsWith("photo-")) drawPhotoVisual(ctx, type, value, revealed, w, h, evidence);
   else if (type.startsWith("measure-") || type.startsWith("uncertainty-")) drawMeasureVisual(ctx, type, value, revealed, w, h);
-  else if (type.startsWith("xt-") || type.startsWith("chase") || type.startsWith("brake") || type.startsWith("chrono-")) drawChronoVisual(ctx, type, value, revealed, w, h);
+  else if (type.startsWith("xt-") || type.startsWith("chase") || type.startsWith("brake") || type.startsWith("chrono-")) drawChronoVisual(ctx, type, value, revealed, w, h, evidence);
   else if (["momentum-","energy-","electric-","magnetic-","optics-","thermal-","celestial-","newton-","resonance-","emwave-","quantum-","nuclear-"].some(prefix => type.startsWith(prefix))) drawExpansionVisual(ctx, type, value, revealed, w, h, evidence);
   else drawTitanVisual(ctx, type, value, revealed, w, h, evidence);
+  if (observed && level.inputs) drawCandidateComparison(ctx, level, evidence, w, h);
   ctx.restore();
+}
+
+function drawCandidateComparison(ctx, level, evidence, w, h) {
+  const candidates = evidence.values || {};
+  const expected = Object.fromEntries((evidence.expectedInputs || []).map(field => [field.id, field.answer]));
+  const fields = level.inputs.map(field => {
+    const candidate = Number(candidates[field.id]);
+    const reference = expected[field.id];
+    return `${field.label}：你刻 ${Number.isFinite(candidate) ? formatControlValue(candidate) : "—"}${field.unit}／機關 ${formatModelValue(reference, field.tolerance)}${field.unit}`;
+  });
+  ctx.fillStyle = evidence.certified ? "rgba(11,61,54,.90)" : "rgba(68,29,35,.92)";
+  ctx.fillRect(105, 490, w - 210, 48);
+  label(ctx, `${evidence.certified ? "刻印吻合" : "刻印不合"}｜${fields.join("　")}`, 125, 520, evidence.certified ? "#a1fff5" : "#ffc0b8", 16);
+}
+
+function drawDormantApparatus(ctx, level, evidence, w, h) {
+  const type = level.visual;
+  ctx.fillStyle = "rgba(7,15,25,.55)";
+  ctx.fillRect(95, 115, w - 190, h - 175);
+  ctx.strokeStyle = "rgba(220,230,242,.72)";
+  ctx.lineWidth = 5;
+  if (type.startsWith("xt-") || type === "chase" || type === "brake") {
+    graphAxes(ctx, 165, 420, 650, 235, "時間", type === "brake" ? "速度" : "位置");
+    drawCart(ctx, 245, 315, "#ffb454", 120); drawCart(ctx, 625, 315, "#55e2db", 120);
+  } else if (type.includes("lens") || type.includes("optics")) {
+    ctx.beginPath(); ctx.moveTo(155,315); ctx.lineTo(845,315); ctx.stroke();
+    ctx.setLineDash([10,8]); ctx.beginPath(); ctx.moveTo(500,145); ctx.lineTo(500,455); ctx.stroke(); ctx.setLineDash([]);
+    if (type.includes("lens")) { ctx.strokeStyle="#b99cff";ctx.lineWidth=9;ctx.beginPath();ctx.ellipse(500,315,38,140,0,0,Math.PI*2);ctx.stroke(); }
+  } else if (type.includes("nuclear") || type.includes("quantum")) {
+    for (let i=0;i<16;i++){const a=i*2.4,r=25+(i%4)*23;dot(ctx,500+Math.cos(a)*r,290+Math.sin(a)*r,i%2?"#ff7396":"#73c8ff",12);}
+  } else if (type.includes("resonance") || type.includes("wave")) {
+    ctx.beginPath();ctx.moveTo(175,315);ctx.lineTo(825,315);ctx.stroke();dot(ctx,315,315,"#78f5ec",11);dot(ctx,685,315,"#78f5ec",11);
+  } else if (type.includes("electric") || type.includes("magnetic") || type.includes("emwave")) {
+    ctx.strokeRect(235,190,530,225);dot(ctx,330,302,"#ff806b",28);dot(ctx,670,302,"#84a7ff",28);
+  } else if (type.includes("thermal") || type.includes("energy")) {
+    ctx.strokeRect(210,225,230,165);ctx.strokeRect(560,225,230,165);
+  } else if (type.includes("momentum") || type.includes("newton")) {
+    drawCart(ctx,235,315,"#ff806b",150);drawCart(ctx,615,315,"#7fa5c9",150);
+  } else if (type.includes("celestial")) {
+    dot(ctx,365,300,"#ffbf5c",45);dot(ctx,670,300,"#91a8ff",30);
+  } else if (type.includes("measure") || type.includes("uncertainty")) {
+    ctx.beginPath();ctx.moveTo(190,340);ctx.lineTo(810,340);ctx.stroke();for(let x=210;x<810;x+=45){ctx.beginPath();ctx.moveTo(x,340);ctx.lineTo(x,315);ctx.stroke();}
+  } else {
+    ctx.beginPath();ctx.moveTo(230,355);ctx.lineTo(790,355);ctx.stroke();dot(ctx,310,355,"#ffd86f",13);dot(ctx,705,315,"#d9c79d",30);
+  }
+  label(ctx, level.storyTeaser || "機關正在等待你的選擇", 175, 470, "#dbe3ef", 18);
 }
 
 function drawBasePlate(ctx, w, h, revealed) {
   ctx.fillStyle = "rgba(5,10,17,.52)";
   ctx.fillRect(26, 28, 300, 50);
-  ctx.fillStyle = revealed === "本次痕跡已封存" ? "#8fffd4" : revealed === "機關調整中" ? "#ffdc8b" : "#d2d9e4";
+  ctx.fillStyle = revealed === "刻印與機關吻合" ? "#8fffd4" : revealed === "刻印與機關不合" ? "#ff9b91" : revealed === "機關調整中" ? "#ffdc8b" : "#d2d9e4";
   ctx.font = "800 20px system-ui";
   ctx.fillText(revealed, 46, 60);
 }
@@ -694,38 +759,42 @@ function graphAxes(ctx, x, y, w, h, xLabel, yLabel) {
   label(ctx,xLabel,x+w-20,y+35,"#dbe3ef",16); label(ctx,yLabel,x-20,y-h-12,"#dbe3ef",16);
 }
 
-function drawChronoVisual(ctx, type, value, revealed) {
+function drawChronoVisual(ctx, type, value, revealed, w, h, evidence) {
   const x=130,y=460,gw=720,gh=320;
   const velocityGraph=type === "brake" || type === "chrono-stop";
   graphAxes(ctx,x,y,gw,gh,"t",velocityGraph?"速度 v":"位置 x");
+  const chrono=evidence.chrono;
   const line=(color,x1,y1,x2,y2)=>{ctx.strokeStyle=color;ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();};
+  const plot=(key,color,maxValue)=>{
+    const series=chrono?.series||[],duration=chrono?.duration||1,cap=maxValue||Math.max(1,...series.map(point=>Math.abs(point[key]||0)));
+    ctx.strokeStyle=color;ctx.lineWidth=7;ctx.beginPath();
+    series.forEach((point,index)=>{const px=x+gw*point.time/duration,py=y-gh*Math.max(0,point[key]||0)/cap;if(index)ctx.lineTo(px,py);else ctx.moveTo(px,py);});
+    ctx.stroke();
+  };
   if(type === "xt-slope") {
-    line("#ffb454",x,y-35,x+620,y-185);
-    line("#55e2db",x,y-15,x+620,y-(55+Number(value)*78));
+    const cap=Math.max(...chrono.series.map(point=>Math.max(point.x1,point.x2)),1);plot("x1","#ffb454",cap);plot("x2","#55e2db",cap);
     if(revealed)evidenceCaption(ctx,"位置—時間圖斜率越大，速度越大");
   } else if(type === "xt-meet") {
-    line("#ffb454",x,y-220,x+620,y-120);
-    line("#55e2db",x,y-20,x+620,y-120);
-    const fraction=Math.max(0,Math.min(1,Number(value)/6)),cursorX=x+620*fraction;
-    const orangeY=y-220+100*fraction,cyanY=y-20-100*fraction,gap=Math.round(Math.abs(cyanY-orangeY));
+    const cap=Math.max(...chrono.series.map(point=>Math.max(point.x1,point.x2)),1);plot("x1","#ffb454",cap);plot("x2","#55e2db",cap);
+    const fraction=Math.max(0,Math.min(1,Number(value)/chrono.duration)),cursorX=x+gw*fraction,point=chrono.series.reduce((best,item)=>Math.abs(item.time-value)<Math.abs(best.time-value)?item:best,chrono.series[0]);
+    const orangeY=y-gh*point.x1/cap,cyanY=y-gh*point.x2/cap,gap=Number(point.gap.toFixed(1));
     ctx.setLineDash([8,7]);line("rgba(255,216,111,.7)",cursorX,y,cursorX,Math.min(orangeY,cyanY));ctx.setLineDash([]);
     dot(ctx,cursorX,orangeY,"#ffb454",10);dot(ctx,cursorX,cyanY,"#55e2db",10);label(ctx,`t = ${value} s｜圖上距離差 ${gap}`,Math.min(cursorX+15,610),165,"#ffdc8b",18);
-    if(revealed){dot(ctx,x+620,y-120,"#ffd86f",12);label(ctx,"t = 6 s：同時同地",x+415,y-140,"#9fffea",19);evidenceCaption(ctx,"交點的時間與位置座標都相同");}
+    if(revealed){const t=chrono.meetingTime,meetX=x+gw*t/chrono.duration,meetY=y-gh*chrono.meetingPosition/cap;dot(ctx,meetX,meetY,"#ffd86f",12);label(ctx,`t = ${formatControlValue(t)} s：同時同地`,x+415,y-140,"#9fffea",19);evidenceCaption(ctx,"chrono.meet｜交點的時間與位置座標都相同");}
   } else if(type === "chase") {
-    line("#ffb454",x,y-115,x+620,y-235);
-    const cyanRise=80+Number(value)*90;line("#55e2db",x,y-15,x+620,y-cyanRise);
-    if(revealed){dot(ctx,x+465,y-205,"#ffd86f",11);evidenceCaption(ctx,"後車斜率較大：領先距離逐漸縮短");}
+    const cap=Math.max(...chrono.series.map(point=>Math.max(point.x1,point.x2)),1);plot("x1","#ffb454",cap);plot("x2","#55e2db",cap);
+    if(revealed)evidenceCaption(ctx,`chrono.meet｜最小間距 ${formatControlValue(chrono.minimumGap)} m；後車較快時距離縮短`);
   } else if(type === "brake") {
-    const stopX=x+Math.max(180,600-Number(value)*120);line("#55e2db",x,y-285,stopX,y);
-    if(revealed){dot(ctx,stopX,y,"#ffd86f",11);evidenceCaption(ctx,"煞車越強，v—t 線越陡且更早到 v=0");}
+    plot("velocity","#55e2db",chrono.initialSpeed);const stopX=x+gw*Math.min(1,chrono.stopTime/chrono.duration);
+    if(revealed){dot(ctx,stopX,y,"#ffd86f",11);evidenceCaption(ctx,`chrono.brake｜停止時間 ${formatControlValue(chrono.stopTime)} s；煞車越強越早到 v=0`);}
   } else if(type === "chrono-uniform") {
-    line("#55e2db",x,y,x+620,y-300);if(revealed)evidenceCaption(ctx,"20 s 內位移 120 m：斜率 v = 6 m/s");
+    plot("x1","#55e2db",120);if(revealed)evidenceCaption(ctx,`chrono.meet｜${formatControlValue(chrono.meetingTime)} s 抵達 120 m 入口`);
   } else if(type === "chrono-accel") {
-    ctx.strokeStyle="#55e2db";ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(x,y);ctx.bezierCurveTo(x+260,y,x+430,y-80,x+620,y-310);ctx.stroke();if(revealed)evidenceCaption(ctx,"由靜止等加速：x—t 圖斜率持續增加");
+    plot("x1","#55e2db",100);if(revealed)evidenceCaption(ctx,`chrono.meet｜等加速軌跡在 ${formatControlValue(chrono.meetingTime)} s 抵達 100 m`);
   } else if(type === "chrono-delay") {
-    line("#ffb454",x,y-85,x+620,y-245);line("#55e2db",x+150,y,x+620,y-245);if(revealed){dot(ctx,x+620,y-245,"#ffd86f",11);evidenceCaption(ctx,"橙車先行 40 m；速度差 4 m/s，10 s 後追上");}
+    const cap=Math.max(...chrono.series.map(point=>Math.max(point.x1,point.x2)),1);plot("x1","#ffb454",cap);plot("x2","#55e2db",cap);if(revealed)evidenceCaption(ctx,`chrono.meet｜橙隊先行 40 m；${formatControlValue(chrono.meetingTime)} s 後追上`);
   } else if(type === "chrono-stop") {
-    line("#55e2db",x,y-285,x+500,y);if(revealed)evidenceCaption(ctx,"v²=v₀²+2aΔx：20 m/s 以 4 m/s² 煞停需 50 m");
+    plot("velocity","#55e2db",chrono.initialSpeed);const stopX=x+gw*Math.min(1,chrono.stopTime/chrono.duration);dot(ctx,stopX,y,"#ffd86f",11);if(revealed)evidenceCaption(ctx,`chrono.brake｜停止位置 ${formatControlValue(chrono.stopPosition)} m｜${chrono.conclusion === "safe_stop" ? "停在安全窗內" : "越過星門"}`);
   }
 }
 
@@ -992,10 +1061,15 @@ function drawOpticsEvidence(ctx, type, value, revealed, evidence) {
     if(observed&&isTir) arrow(ctx,normalX,interfaceY,normalX+Math.sin(theta1)*rayLen,interfaceY-Math.cos(theta1)*rayLen,"#84a7ff","全反射");
     else if(observed&&isCritical) arrow(ctx,normalX,interfaceY,820,interfaceY,"#84a7ff","臨界折射光");
     else if(observed) arrow(ctx,normalX,interfaceY,normalX+Math.sin(Math.asin(1.5*Math.sin(theta1)))*190,interfaceY+Math.cos(Math.asin(1.5*Math.sin(theta1)))*190,"#84a7ff","折射光");
+    if(observed && isCritical && Number.isFinite(optics.studentAngle) && Math.abs(optics.studentAngle-critical)>.2){
+      const studentTheta=Math.max(8,Math.min(82,optics.studentAngle))*Math.PI/180;
+      ctx.save();ctx.setLineDash([10,8]);arrow(ctx,normalX-Math.sin(studentTheta)*rayLen,interfaceY-Math.cos(studentTheta)*rayLen,normalX,interfaceY,"#ff8f86","你刻的 θc");ctx.restore();
+    }
     if(revealed)evidenceCaption(ctx,isCritical?"θc = sin⁻¹(1/1.5) ≈ 41.8°；折射角為 90°":"由高 n 射向低 n 且 θi > θc：只剩反射光");return;
   }
   const n2=calc?1.5:Number(value),theta2=(optics?.refraction ?? physics.snellAngle(1,n2,incidence))*Math.PI/180;
   if(observed)arrow(ctx,normalX,interfaceY,normalX+Math.sin(theta2)*rayLen,interfaceY+Math.cos(theta2)*rayLen,"#84a7ff","折射光");
+  if(observed && calc && Number.isFinite(optics.studentRefraction) && Math.abs(optics.studentRefraction-(optics.refraction ?? 0))>.2){const studentTheta=Math.max(5,Math.min(85,optics.studentRefraction))*Math.PI/180;ctx.save();ctx.setLineDash([10,8]);arrow(ctx,normalX,interfaceY,normalX+Math.sin(studentTheta)*rayLen,interfaceY+Math.cos(studentTheta)*rayLen,"#ff8f86","你刻的角度");ctx.restore();}
   if(revealed)evidenceCaption(ctx,calc?"sinθ₂ = sin30°/1.5 → θ₂ ≈ 19.5°":"進入較高折射率介質：折射角變小、光線偏向法線");
 }
 

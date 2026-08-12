@@ -46,7 +46,7 @@ function texts(level, state) {
 for (const level of auditedLevels) {
   assert.ok(level.assessedClaim, `${level.code}: claim must be declared before disclosure review`);
   const before = texts(level, { phase: "pre-plan", value: level.control?.base });
-  for (const field of level.inputs || []) {
+  for (const field of level.inputs ? physics.solveAdvanced(level) : []) {
     const escaped = String(field.answer).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const answerToken = new RegExp(`(^|[^0-9.])${escaped}(?![0-9.])`);
     const answerWithUnit = field.unit ? new RegExp(`(^|[^0-9.])${escaped}\\s*${field.unit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![0-9A-Za-z])`) : null;
@@ -59,7 +59,9 @@ for (const level of auditedLevels) {
 const byCode = Object.fromEntries(auditedLevels.map(level => [level.code, level]));
 const auditedFoundation = data.temples.flatMap(temple => temple.tracks.foundation);
 for (const level of auditedFoundation) {
-  const correctLabel = level.prediction.options.find(item => item.value === level.prediction.correct).label;
+  const evidence = physics.deriveEvidenceState(level, { phase: "evidence", value: level.control.target });
+  const conclusion = physics.deriveQualitativeConclusion(level, evidence);
+  const correctLabel = level.prediction.options.find(item => item.value === conclusion.prediction).label;
   const publicBeforePlan = [level.storyTeaser, level.storyProblem, ...(level.prePlanKnown || [])].join("｜");
   assert.ok(level.storyTeaser && level.storyProblem && level.prePlanKnown, `${level.code}: explicit pre-plan disclosure copy missing`);
   if (publicBeforePlan.includes(correctLabel)) {
@@ -92,6 +94,20 @@ assert.equal(magneticWrongEntry.magnetic.studentRadius, 1.5, "magnetic evidence 
 const opticsWrongEntry = physics.deriveEvidenceState(byCode["O-A3"], { phase: "evidence", values: { distance: 12 } });
 assert.ok(Math.abs(opticsWrongEntry.optics.imageDistance - 15) < 1e-9, "optics physical ray intersection must come from f and do");
 assert.equal(opticsWrongEntry.optics.studentImageDistance, 12, "optics evidence must retain the player's claimed image distance separately");
+const snellWrongEntry = physics.deriveEvidenceState(byCode["O-A1"], { phase: "evidence", values: { angle: 70 } });
+assert.ok(Math.abs(snellWrongEntry.optics.refraction - 19.4712) < 1e-3, "O-A1 physical refraction ray must stay on Snell's law when the player enters 70 degrees");
+assert.equal(snellWrongEntry.optics.studentAngle, 70, "O-A1 must retain the player's angle as a separate comparison marker");
+const criticalWrongEntry = physics.deriveEvidenceState(byCode["O-A2"], { phase: "evidence", values: { angle: 70 } });
+assert.ok(Math.abs(criticalWrongEntry.optics.incidence - 41.8103) < 1e-3, "O-A2 physical critical ray must stay at the model angle when the player enters 70 degrees");
+assert.equal(criticalWrongEntry.optics.studentAngle, 70, "O-A2 must retain the player's angle as a separate comparison marker");
+
+const chronoMeet = physics.deriveEvidenceState(byCode["C-F2"], { phase: "evidence", value: 6 }).chrono;
+assert.equal(chronoMeet.contractId, "chrono.meet");
+assert.ok(Math.abs(chronoMeet.meetingTime - 6) < 1e-9);
+const chronoBrake = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 50 } }).chrono;
+assert.equal(chronoBrake.contractId, "chrono.brake");
+assert.ok(Math.abs(chronoBrake.stopPosition - 50) < 1e-9);
+assert.equal(chronoBrake.conclusion, "safe_stop");
 
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
 assert.match(app, /physics\.interferenceAt\(px,py,wave\.params\)/, "wave renderer must consume the domain model, not fixed decoration");

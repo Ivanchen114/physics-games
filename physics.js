@@ -78,6 +78,281 @@
     return { imageDistance, magnification: -imageDistance / objectDistance };
   }
 
+  function chronoMeeting({ first = { x0: 20, v0: 2, a: 0 }, second = { x0: 0, v0: 4, a: 0 }, duration = 10, samples = 41 } = {}) {
+    const positionAt = (body, time) => body.x0 + body.v0 * time + .5 * body.a * time * time;
+    const velocityAt = (body, time) => body.v0 + body.a * time;
+    const series = Array.from({ length: samples }, (_, index) => {
+      const time = duration * index / (samples - 1);
+      const x1 = positionAt(first, time), x2 = positionAt(second, time);
+      return { time, x1, x2, v1: velocityAt(first, time), v2: velocityAt(second, time), gap: Math.abs(x1 - x2) };
+    });
+    const A = .5 * (second.a - first.a), B = second.v0 - first.v0, C = second.x0 - first.x0;
+    let meetingTime = null;
+    if (Math.abs(A) < 1e-12) {
+      if (Math.abs(B) > 1e-12) meetingTime = -C / B;
+    } else {
+      const discriminant = B * B - 4 * A * C;
+      if (discriminant >= 0) {
+        const roots = [(-B - Math.sqrt(discriminant)) / (2 * A), (-B + Math.sqrt(discriminant)) / (2 * A)].filter(time => time >= 0);
+        if (roots.length) meetingTime = Math.min(...roots);
+      }
+    }
+    const timeTolerance = Math.max(1, duration) * 1e-10;
+    if (!(meetingTime >= -timeTolerance && meetingTime <= duration + timeTolerance)) meetingTime = null;
+    else meetingTime = Math.max(0, Math.min(duration, meetingTime));
+    return {
+      contractId: "chrono.meet",
+      modelId: Math.abs(first.a) + Math.abs(second.a) > 1e-12 ? "relative_accelerated_motion" : "uniform_relative_motion",
+      first, second, duration, series,
+      meetingTime,
+      meetingPosition: meetingTime === null ? null : positionAt(first, meetingTime),
+      minimumGap: Math.min(...series.map(point => point.gap)),
+      conclusion: meetingTime === null ? "safe_pass" : "collision"
+    };
+  }
+
+  function chronoBrake({ initialSpeed = 20, deceleration = 4, brakeStart = 0, gatePosition = 50, duration = 8, samples = 41 } = {}) {
+    const magnitude = Math.max(0, deceleration);
+    const stopTime = magnitude > 0 ? initialSpeed / magnitude : Infinity;
+    const stopDistance = magnitude > 0 ? initialSpeed * initialSpeed / (2 * magnitude) : Infinity;
+    const series = Array.from({ length: samples }, (_, index) => {
+      const time = duration * index / (samples - 1);
+      const brakingTime = Math.max(0, time - brakeStart);
+      const activeTime = Math.min(brakingTime, stopTime);
+      return {
+        time,
+        velocity: Math.max(0, initialSpeed - magnitude * brakingTime),
+        position: initialSpeed * Math.min(time, brakeStart) + initialSpeed * activeTime - .5 * magnitude * activeTime * activeTime
+      };
+    });
+    return {
+      contractId: "chrono.brake",
+      modelId: "constant_acceleration_stop",
+      initialSpeed, deceleration: magnitude, brakeStart, gatePosition, duration, series,
+      stopTime: brakeStart + stopTime,
+      stopPosition: initialSpeed * brakeStart + stopDistance,
+      conclusion: initialSpeed * brakeStart + stopDistance <= gatePosition ? "safe_stop" : "overshoot"
+    };
+  }
+
+  const qualitativeModels = {
+    pivot: () => ["pivot", "rotate"],
+    "lever-distance": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "farther"],
+    "force-direction": (level, evidence) => [Math.sin(deg(evidence.value)) > Math.sin(deg(level.control.base)) ? "increase" : "decrease", "perpendicular"],
+    posture: (level, evidence) => [evidence.value < level.control.base ? "decrease" : "increase", "shorter"],
+    "xt-slope": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "more-position"],
+    "xt-meet": (level, evidence) => [evidence.chrono?.meetingTime !== null && nearly(evidence.value, evidence.chrono.meetingTime, .01) ? "meet" : "stop", "same-coordinates"],
+    chase: (level, evidence) => [evidence.value > 0 ? "decrease" : "same", "relative"],
+    brake: (level, evidence) => [evidence.value > level.control.base ? "decrease" : "same", "steeper-down"],
+    "photo-threshold": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "threshold"],
+    "photo-intensity": () => ["no", "per-photon"],
+    "photo-metal": () => ["A", "lower"],
+    "photo-budget": () => ["threshold-first", "intensity"],
+    "wave-frequency": (level, evidence) => [evidence.wave.observable.wavelength < 12 / level.control.base ? "narrow" : "same", "inverse"],
+    "wave-amplitude": (level, evidence) => [evidence.value > level.control.base ? "contrast" : "same", "frequency"],
+    "wave-two-source": (level, evidence) => [evidence.value >= 2 ? "bands" : "rings", "superpose"],
+    "wave-separation": (level, evidence) => [evidence.value > level.control.base ? "denser" : "same", "wavelength"],
+    "measure-scale": () => ["63g", "digits"],
+    "measure-scatter": () => ["A", "repeatability"],
+    "measure-tool": () => ["caliper", "resolution"],
+    "measure-report": () => ["honest", "place"],
+    "momentum-impulse": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "impulse"],
+    "momentum-recoil": () => ["left", "total"],
+    "momentum-cushion": (level, evidence) => [evidence.value > level.control.base ? "decrease" : "same", "same-impulse"],
+    "momentum-stick": () => ["p-only", "other"],
+    "energy-work": (level, evidence) => [Math.cos(deg(evidence.value)) < 0 ? "negative" : "positive", "dot"],
+    "energy-height": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "mgh"],
+    "energy-friction": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "thermal"],
+    "energy-power": (level, evidence) => [evidence.value < level.control.base ? "increase" : "decrease", "work-time"],
+    "electric-charge": (level, evidence) => [evidence.value > 0 ? "repel" : "attract", "same"],
+    "electric-field": () => ["out", "positive-test"],
+    "electric-series": () => ["same", "one-path"],
+    "electric-parallel": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "decrease"],
+    "magnetic-poles": () => ["repel", "pole-rule"],
+    "magnetic-lorentz": (level, evidence) => [evidence.magnetic.trajectory.direction, "perpendicular"],
+    "magnetic-wire": (level, evidence) => [evidence.value !== level.control.base ? "reverse" : "same", "cross"],
+    "magnetic-induction": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "rate"],
+    "optics-reflection": (level, evidence) => [evidence.optics.reflection > level.control.base ? "increase" : "same", "equal"],
+    "optics-refraction": () => ["toward", "speed"],
+    "optics-tir": (level, evidence) => [evidence.value > evidence.optics.critical ? "tir" : "refract", "high-low"],
+    "optics-lens": () => ["focus", "ray"],
+    "thermal-flow": () => ["hot-cold", "equal-temp"],
+    "thermal-capacity": () => ["larger", "q-over-c"],
+    "thermal-gas": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "collisions"],
+    "thermal-compress": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "work-in"],
+    "celestial-gravity": (level, evidence) => [nearly(evidence.value / level.control.base, 2, .01) ? "quarter" : "same", "inverse-square"],
+    "celestial-circular": () => ["center", "direction-change"],
+    "celestial-period": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "slower-longer"],
+    "celestial-weight": () => ["mass-same", "mg"],
+    "newton-inertia": (level, evidence) => [nearly(evidence.value, 0, 1e-9) ? "constant" : "accelerate", "inertia"],
+    "newton-net": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "fma"],
+    "newton-friction": () => ["match", "balance"],
+    "newton-projectile": () => ["components", "gravity-vertical"],
+    "resonance-pitch": (level, evidence) => [evidence.value > level.control.base ? "higher" : "same", "loudness"],
+    "resonance-standing": () => ["still", "max"],
+    "resonance-match": () => ["peak", "resonance"],
+    "resonance-tube": () => ["node", "antinode"],
+    "emwave-ac": () => ["reverse", "one-direction"],
+    "emwave-generator": (level, evidence) => [evidence.value > level.control.base ? "increase" : "same", "flux-rate"],
+    "emwave-transformer": (level, evidence) => [evidence.value > level.control.base ? "higher" : "same", "turns"],
+    "emwave-polarization": (level, evidence) => [Math.abs(Math.cos(deg(evidence.value))) < Math.abs(Math.cos(deg(level.control.base))) ? "decrease" : "same", "transverse"],
+    "quantum-electron": (level, evidence) => [evidence.value > level.control.base ? "bend" : "straight", "charged-particle"],
+    "quantum-charge": () => ["integer", "quantized"],
+    "quantum-planck": () => ["nhf", "packets"],
+    "quantum-atom": () => ["probability", "levels"],
+    "nuclear-core": () => ["strong", "strong-no-charge"],
+    "nuclear-radiation": () => ["minus4", "energy"],
+    "nuclear-halflife": () => ["same", "half"],
+    "nuclear-forces": () => ["weak", "strong"]
+  };
+
+  function deriveQualitativeConclusion(level, evidence) {
+    const model = qualitativeModels[level.visual];
+    if (!model) throw new Error(`No qualitative domain model for ${level.code} (${level.visual})`);
+    const [prediction, reason] = model(level, evidence);
+    return { prediction, reason, contractId: level.stateContract.contractId, evidenceVersion: evidence.version };
+  }
+
+  function evaluateFoundation(level, evidence, selectedPrediction, selectedReason) {
+    const conclusion = evidence.conclusion || deriveQualitativeConclusion(level, evidence);
+    return {
+      predictionOK: selectedPrediction === conclusion.prediction,
+      reasonOK: selectedReason === conclusion.reason,
+      expectedPrediction: conclusion.prediction,
+      expectedReason: conclusion.reason,
+      evidenceVersion: conclusion.evidenceVersion
+    };
+  }
+
+  function evaluateAdvanced(level, evidence, selectedModel, values) {
+    const results = checkInputs({ inputs: evidence.expectedInputs }, values);
+    return {
+      modelOK: selectedModel === evidence.expectedModel,
+      valuesOK: results.every(result => result.ok),
+      results,
+      evidenceVersion: evidence.version
+    };
+  }
+
+  const advancedModelByVisual = {
+    biceps:"balance", triceps:"sine", deadlift:"sum", achilles:"ankle",
+    "chrono-uniform":"uniform", "chrono-accel":"accel", "chrono-delay":"relative", "chrono-stop":"v2",
+    "photo-energy":"lambda", "photo-kmax":"subtract", "photo-voltage":"stopping", "photo-flux":"flux",
+    "wave-calc":"wave", "wave-phase":"phase", "wave-lines":"count", "wave-inverse":"inverse",
+    "uncertainty-mass":"rect", "uncertainty-dimension":"rect", "uncertainty-perimeter":"rss", "uncertainty-density":"relative", "uncertainty-repeat":"combine",
+    "momentum-calc-impulse":"impulse", "momentum-calc-recoil":"conserve", "momentum-calc-stick":"stick", "momentum-calc-loss":"loss",
+    "energy-calc-work":"dot", "energy-calc-height":"mgh", "energy-calc-speed":"conserve", "energy-calc-power":"power",
+    "electric-calc-force":"coulomb", "electric-calc-field":"field", "electric-calc-series":"series", "electric-calc-parallel":"parallel",
+    "magnetic-calc-force":"lorentz", "magnetic-calc-radius":"radius", "magnetic-calc-wire":"wire", "magnetic-calc-emf":"faraday",
+    "optics-calc-snell":"snell", "optics-calc-critical":"critical", "optics-calc-lens":"lens", "optics-calc-magnify":"magnify",
+    "thermal-calc-heat":"heat", "thermal-calc-mix":"balance", "thermal-calc-gas":"ideal", "thermal-calc-firstlaw":"firstlaw",
+    "celestial-calc-gravity":"gravity", "celestial-calc-speed":"orbit", "celestial-calc-period":"period", "celestial-calc-kepler":"kepler",
+    "newton-calc-net":"net", "newton-calc-friction":"friction", "newton-calc-incline":"parallel", "newton-calc-projectile":"separate",
+    "resonance-calc-wave":"wave", "resonance-calc-string":"half-wave", "resonance-calc-tube":"quarter", "resonance-calc-harmonic":"harmonic",
+    "emwave-calc-faraday":"faraday", "emwave-calc-voltage":"ratio", "emwave-calc-current":"power", "emwave-calc-wavelength":"wave",
+    "quantum-calc-xray":"cutoff", "quantum-calc-photon":"planck", "quantum-calc-matter":"debroglie", "quantum-calc-spectrum":"transition",
+    "nuclear-calc-half":"half-life", "nuclear-calc-mass":"mass-energy", "nuclear-calc-alpha":"subtract", "nuclear-calc-beta":"beta-minus"
+  };
+
+  function deriveAdvancedModel(level) {
+    const model = advancedModelByVisual[level.visual];
+    if (!model) throw new Error(`No advanced domain model for ${level.code} (${level.visual})`);
+    return model;
+  }
+
+  function solveAdvanced(level) {
+    const visual = level.visual;
+    let result;
+    if (visual === "biceps") result = { force: 50 * 30 / 5 };
+    else if (visual === "triceps") result = { weight: tricepsWeight(300, 5, 30, 150) };
+    else if (visual === "deadlift") result = { weight: deadliftWeight(2250, 8, 300, 40, 60) };
+    else if (visual === "achilles") result = { normal: achillesNormalForce(3000, 5, 15) };
+    else if (visual === "chrono-uniform") result = { speed: 120 / 20 };
+    else if (visual === "chrono-accel") result = { acceleration: 2 * 100 / 10 ** 2 };
+    else if (visual === "chrono-delay") result = { time: 4 * 10 / (8 - 4) };
+    else if (visual === "chrono-stop") result = { distance: 20 ** 2 / (2 * 4) };
+    else if (visual === "photo-energy") result = { energy: 1240 / 400 };
+    else if (visual === "photo-kmax") result = { kmax: 3.5 - 2.3 };
+    else if (visual === "photo-voltage") result = { voltage: 1.4 };
+    else if (visual === "photo-flux") result = { electrons: 20 * 10 * 2 * .25 };
+    else if (visual === "wave-calc") result = { speed: 6 * .5 };
+    else if (visual === "wave-phase") result = { phase: (360 * 1.5) % 360 };
+    else if (visual === "wave-lines") result = lineCounts(3.2);
+    else if (visual === "wave-inverse") result = { frequency: 12 / 4, phase: 180 };
+    else if (visual === "uncertainty-mass") result = { uncertainty: typeB(1) };
+    else if (visual === "uncertainty-dimension") result = { uncertainty: typeB(.1) };
+    else if (visual === "uncertainty-perimeter") result = { uncertainty: 2 * rootSumSquare([.03, .03]) };
+    else if (visual === "uncertainty-density") {
+      const density = 270 / (10 * 5 * 2);
+      result = { density, uncertainty: density * rootSumSquare([.29 / 270, .03 / 10, .03 / 5, .03 / 2]) };
+    } else if (visual === "uncertainty-repeat") {
+      const readings = [25.40, 25.70, 25.80, 25.60];
+      result = { mean: Number(mean(readings).toFixed(2)), uncertainty: rootSumSquare([standardUncertaintyOfMean(readings), typeB(.1)]) };
+    } else if (visual === "momentum-calc-impulse") result = { impulse: 120 * .25 };
+    else if (visual === "momentum-calc-recoil") result = { speed: 3 * 8 / 60 };
+    else if (visual === "momentum-calc-stick") result = { speed: 2 * 6 / (2 + 1) };
+    else if (visual === "momentum-calc-loss") result = { energy: .5 * 2 * 6 ** 2 - .5 * 3 * 4 ** 2 };
+    else if (visual === "energy-calc-work") result = { work: 50 * 3 * Math.cos(deg(60)) };
+    else if (visual === "energy-calc-height") result = { energy: 2 * 9.8 * 5 };
+    else if (visual === "energy-calc-speed") result = { speed: Math.sqrt(2 * 9.8 * 5) };
+    else if (visual === "energy-calc-power") result = { power: 30 * 9.8 * 5 / 10 };
+    else if (visual === "electric-calc-force") result = { force: 9e9 * 2e-6 * 3e-6 / .3 ** 2 };
+    else if (visual === "electric-calc-field") result = { field: 9e9 * 4e-6 / .3 ** 2 };
+    else if (visual === "electric-calc-series") result = { current: 12 / (4 + 6) };
+    else if (visual === "electric-calc-parallel") { const resistance = 1 / (1 / 6 + 1 / 3); result = { resistance, current: 12 / resistance }; }
+    else if (visual === "magnetic-calc-force") result = { force: magneticForce(2e-6, 3e4, .5) };
+    else if (visual === "magnetic-calc-radius") result = { radius: magneticRadius(.004, 3, .002, 2) };
+    else if (visual === "magnetic-calc-wire") result = { force: .4 * 3 * .5 * Math.sin(deg(90)) };
+    else if (visual === "magnetic-calc-emf") result = { emf: 200 * .03 / .5 };
+    else if (visual === "optics-calc-snell") result = { angle: snellAngle(1, 1.5, 30) };
+    else if (visual === "optics-calc-critical") result = { angle: criticalAngle(1.5, 1) };
+    else if (visual === "optics-calc-lens") result = { distance: thinLens(10, 30).imageDistance };
+    else if (visual === "optics-calc-magnify") result = { height: 4 * thinLens(10, 30).magnification };
+    else if (visual === "thermal-calc-heat") result = { heat: .5 * 4200 * 10 };
+    else if (visual === "thermal-calc-mix") result = { temperature: (80 + 20) / 2 };
+    else if (visual === "thermal-calc-gas") result = { pressure: 1 * 8.31 * 300 / .0249 / 1000 };
+    else if (visual === "thermal-calc-firstlaw") result = { energy: 500 - 200 };
+    else if (visual === "celestial-calc-gravity") result = { force: 6.67e-11 * 1000 * 1000 / 10 ** 2 };
+    else if (visual === "celestial-calc-speed") result = { speed: Math.sqrt(3.986e14 / 6.37e6) / 1000 };
+    else if (visual === "celestial-calc-period") result = { period: 2 * Math.PI * 7e6 / 7.5e3 };
+    else if (visual === "celestial-calc-kepler") result = { ratio: 4 ** 1.5 };
+    else if (visual === "newton-calc-net") result = { acceleration: (28 - 8) / 5 };
+    else if (visual === "newton-calc-friction") result = { acceleration: (50 - .2 * 10 * 9.8) / 10 };
+    else if (visual === "newton-calc-incline") result = { acceleration: 9.8 * Math.sin(deg(30)) };
+    else if (visual === "newton-calc-projectile") { const time = Math.sqrt(2 * 45 / 10); result = { time, range: 20 * time }; }
+    else if (visual === "resonance-calc-wave") result = { wavelength: 120 / 60 };
+    else if (visual === "resonance-calc-string") result = { frequency: 340 / (2 * .85) };
+    else if (visual === "resonance-calc-tube") result = { frequency: 340 / (4 * .425) };
+    else if (visual === "resonance-calc-harmonic") result = { frequency: 3 * 200 };
+    else if (visual === "emwave-calc-faraday") result = { voltage: 200 * .015 / .1 };
+    else if (visual === "emwave-calc-voltage") result = { voltage: 120 * 200 / 1000 };
+    else if (visual === "emwave-calc-current") result = { current: 120 * 1 / 24 };
+    else if (visual === "emwave-calc-wavelength") result = { wavelength: 3e8 / 1e8 };
+    else if (visual === "quantum-calc-xray") result = { wavelength: 1240 / 12400 };
+    else if (visual === "quantum-calc-photon") result = { energy: 4.14e-15 * 6e14 };
+    else if (visual === "quantum-calc-matter") result = { wavelength: 6.63e-34 / 6.63e-24 / 1e-9 };
+    else if (visual === "quantum-calc-spectrum") { const energy = 13.6 * (1 / 2 ** 2 - 1 / 3 ** 2); result = { energy, wavelength: 1240 / energy }; }
+    else if (visual === "nuclear-calc-half") result = { nuclei: 800 * .5 ** (6 / 2) };
+    else if (visual === "nuclear-calc-mass") result = { energy: .002 * 931.5 };
+    else if (visual === "nuclear-calc-alpha") result = { massNumber: 238 - 4, atomicNumber: 92 - 2 };
+    else if (visual === "nuclear-calc-beta") result = { atomicNumber: 6 + 1 };
+    else throw new Error(`No advanced solver for ${level.code} (${visual})`);
+    return level.stateContract.outputSchema.map(field => ({ ...field, answer: result[field.id] }));
+  }
+
+  function describeEvidence(level, evidence) {
+    const contract = level.stateContract;
+    if (!contract) throw new Error(`No state contract for ${level.code}`);
+    const observations = [];
+    if (evidence.wave) observations.push(`λ=${Number(evidence.wave.observable.wavelength.toFixed(3))}`);
+    if (evidence.magnetic) observations.push(`軌跡半徑=${Number(evidence.magnetic.trajectory.radius.toFixed(3))}`);
+    if (evidence.optics?.refraction !== null && Number.isFinite(evidence.optics?.refraction)) observations.push(`物理折射角=${Number(evidence.optics.refraction.toFixed(2))}°`);
+    if (Number.isFinite(evidence.optics?.critical)) observations.push(`臨界角=${Number(evidence.optics.critical.toFixed(2))}°`);
+    if (evidence.chrono?.contractId === "chrono.meet") observations.push(evidence.chrono.meetingTime === null ? "時限內未相遇" : `會合時間=${Number(evidence.chrono.meetingTime.toFixed(2))} s`);
+    if (evidence.chrono?.contractId === "chrono.brake") observations.push(`停止位置=${Number(evidence.chrono.stopPosition.toFixed(2))} m`);
+    return `${contract.explanation}${observations.length ? ` 本次機關狀態：${observations.join("；")}。` : ""}`;
+  }
+
   function interferenceAt(x, y, params) {
     const wavelength = params.speed / params.frequency;
     const half = params.separation / 2;
@@ -149,7 +424,8 @@
       values,
       modelOK: condition.modelOK,
       valuesOK: condition.valuesOK,
-      claimRef: level.assessedClaim,
+      claimRef: level.stateContract?.assessedClaim || level.assessedClaim,
+      contractId: level.stateContract?.contractId,
       version: `${level.code}:${phase}:${JSON.stringify(values)}`
     };
     if (level.visual.startsWith("wave-")) evidence.wave = deriveWaveEvidence(level, { ...condition, phase, values });
@@ -170,7 +446,8 @@
       };
     }
     if (level.visual.startsWith("optics-")) {
-      const incidence = level.visual.includes("reflection") || level.visual === "optics-tir"
+      const boundaryCritical = criticalAngle(1.5, 1);
+      const incidence = level.visual === "optics-calc-critical" ? boundaryCritical : level.visual.includes("reflection") || level.visual === "optics-tir"
         ? evidence.value
         : level.visual === "optics-refraction" ? 45 : 30;
       const n1 = level.visual.includes("tir") || level.visual.includes("critical") ? 1.5 : 1;
@@ -179,13 +456,30 @@
       evidence.optics = {
         incidence,
         reflection: incidence,
-        refraction: Number.isFinite(values.angle) ? values.angle : snellAngle(n1, n2, incidence),
-        critical: criticalAngle(1.5, 1),
+        refraction: snellAngle(n1, n2, incidence),
+        studentAngle: Number.isFinite(values.angle) ? values.angle : null,
+        studentRefraction: Number.isFinite(values.angle) ? values.angle : null,
+        critical: boundaryCritical,
         imageDistance: lens.imageDistance,
         magnification: lens.magnification,
         studentImageDistance: Number.isFinite(values.distance) ? values.distance : null,
         studentImageHeight: Number.isFinite(values.height) ? values.height : null
       };
+    }
+    if (level.code?.startsWith("C-")) {
+      if (level.visual === "brake") evidence.chrono = chronoBrake({ initialSpeed: 12, deceleration: Math.max(.1, evidence.value), gatePosition: 80, duration: 12 });
+      else if (level.visual === "chrono-stop") evidence.chrono = chronoBrake({ initialSpeed: 20, deceleration: 4, gatePosition: 50, duration: 6 });
+      else if (level.visual === "xt-meet") evidence.chrono = chronoMeeting({ first: { x0: 20, v0: 1, a: 0 }, second: { x0: 0, v0: 13 / 3, a: 0 }, duration: 6 });
+      else if (level.visual === "xt-slope") evidence.chrono = chronoMeeting({ first: { x0: 0, v0: 1, a: 0 }, second: { x0: 0, v0: Math.max(.1, evidence.value), a: 0 }, duration: 6 });
+      else if (level.visual === "chrono-uniform") evidence.chrono = chronoMeeting({ first: { x0: 0, v0: 6, a: 0 }, second: { x0: 120, v0: 0, a: 0 }, duration: 20 });
+      else if (level.visual === "chrono-accel") evidence.chrono = chronoMeeting({ first: { x0: 0, v0: 0, a: 2 }, second: { x0: 100, v0: 0, a: 0 }, duration: 10 });
+      else if (level.visual === "chase" || level.visual === "chrono-delay") evidence.chrono = chronoMeeting({ first: { x0: 40, v0: 4, a: 0 }, second: { x0: 0, v0: level.visual === "chrono-delay" ? 8 : 4 + evidence.value, a: 0 }, duration: 12 });
+      else evidence.chrono = chronoMeeting({ first: { x0: 0, v0: 3, a: 0 }, second: { x0: 0, v0: level.visual === "chrono-accel" ? 0 : Math.max(1, evidence.value), a: level.visual === "chrono-accel" ? 2 : 0 }, duration: 10 });
+    }
+    if (level.prediction) evidence.conclusion = deriveQualitativeConclusion(level, evidence);
+    if (level.inputs) {
+      evidence.expectedModel = deriveAdvancedModel(level);
+      evidence.expectedInputs = solveAdvanced(level);
     }
     return evidence;
   }
@@ -209,9 +503,17 @@
     snellAngle,
     criticalAngle,
     thinLens,
+    chronoMeeting,
+    chronoBrake,
     interferenceAt,
     singleWaveAt,
     deriveWaveEvidence,
-    deriveEvidenceState
+    deriveEvidenceState,
+    deriveQualitativeConclusion,
+    evaluateFoundation,
+    evaluateAdvanced,
+    deriveAdvancedModel,
+    solveAdvanced,
+    describeEvidence
   };
 });
