@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070b12">
+  <meta name="description" content="在局部迷霧中探索法則神殿，以方向鍵或觸控移動，尋找通往高中物理挑戰的入口。">
+  <title>失序前庭｜法則神殿探索</title>
+  <link rel="icon" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="explore-body">
+  <a class="skip-link" href="#maze-panel">跳到迷宮</a>
+  <header class="explore-topbar">
+    <a href="index.html" aria-label="返回法則神殿首頁">← 神殿總圖</a>
+    <strong>失序前庭</strong>
+    <span data-explore-count>已發現 0 / 5</span>
+  </header>
+
+  <main class="explore-shell">
+    <section class="explore-intro" aria-labelledby="explore-title">
+      <div>
+        <p class="eyebrow">RPG EXPLORATION · FIRST REGION</p>
+        <h1 id="explore-title">失序前庭</h1>
+      </div>
+      <div>
+        <p>迷霧不是用來遮住答案，而是讓探索有方向：你走過的路會被永久記住，靠近神殿門時，法則羅盤會顯示它的物理主題與學習路線。</p>
+        <p class="explore-scope">這是第一個可玩區域，先連結五座代表神殿；完整十七殿仍可由「神殿總圖」自由進入。</p>
+      </div>
+    </section>
+
+    <div class="explore-layout">
+      <section id="maze-panel" class="maze-panel" aria-labelledby="maze-title">
+        <div class="maze-heading">
+          <div><p class="eyebrow">LOCAL FOG · PERSISTENT DISCOVERY</p><h2 id="maze-title">循著法則回聲前進</h2></div>
+          <button type="button" class="map-reset" data-reset-exploration>重新展開迷霧</button>
+        </div>
+        <div class="maze-frame">
+          <canvas data-maze-canvas width="1260" height="780" tabindex="0" role="img" aria-label="失序前庭迷宮。可使用方向鍵或 WASD 移動，靠近發光入口後按 Enter 進入神殿。"></canvas>
+          <div class="maze-vignette" aria-hidden="true"></div>
+          <div class="maze-prompt" data-maze-prompt aria-live="polite">使用方向鍵、WASD 或下方按鈕開始探索。</div>
+        </div>
+
+        <div class="maze-controls" aria-label="移動控制">
+          <div class="dpad">
+            <button type="button" data-move="up" aria-label="向上移動">↑</button>
+            <button type="button" data-move="left" aria-label="向左移動">←</button>
+            <button type="button" data-move="down" aria-label="向下移動">↓</button>
+            <button type="button" data-move="right" aria-label="向右移動">→</button>
+          </div>
+          <button type="button" class="gate-action" data-gate-action disabled>尚未靠近神殿門</button>
+        </div>
+        <p class="keyboard-help">鍵盤：方向鍵／WASD 移動，Enter 進入神殿。已走過的區域會保留微光，不必重新摸黑。</p>
+      </section>
+
+      <aside class="compass-panel" aria-labelledby="compass-title">
+        <p class="eyebrow">LAW COMPASS</p>
+        <h2 id="compass-title">法則羅盤</h2>
+        <div class="compass-status" data-compass-status>
+          <span>目前回聲</span>
+          <strong>尚未鎖定</strong>
+          <p>向迷霧深處前進；靠近入口時，羅盤會辨認神殿。</p>
+        </div>
+        <div class="gate-ledger" data-gate-ledger aria-label="已發現神殿入口"></div>
+        <a class="all-temples-link" href="index.html#temple-selection">查看完整十七神殿 <span aria-hidden="true">→</span></a>
+      </aside>
+    </div>
+  </main>
+
+  <script src="data.js"></script>
+  <script src="exploration-data.js"></script>
+  <script src="audio.js"></script>
+  <script src="explore.js"></script>
+</body>
+</html>

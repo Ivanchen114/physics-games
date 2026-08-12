@@ -4,11 +4,11 @@ const path = require("node:path");
 const data = require("../data.js");
 const root = path.resolve(__dirname, "..");
 
-for (const filename of ["index.html", "temple.html", "styles.css", "data.js", "physics.js", "audio.js", "home.js", "app.js", "favicon.svg", "og.png"]) {
+for (const filename of ["index.html", "explore.html", "temple.html", "styles.css", "data.js", "exploration-data.js", "physics.js", "audio.js", "home.js", "explore.js", "app.js", "favicon.svg", "og.png"]) {
   assert.ok(fs.existsSync(path.join(root, filename)), `${filename} missing`);
 }
 
-const htmlFiles = ["index.html", "temple.html"];
+const htmlFiles = ["index.html", "explore.html", "temple.html"];
 for (const filename of htmlFiles) {
   const html = fs.readFileSync(path.join(root, filename), "utf8");
   for (const match of html.matchAll(/(?:href|src)="([^"?#]+)"/g)) {
@@ -58,6 +58,8 @@ const home = fs.readFileSync(path.join(root, "home.js"), "utf8");
 assert.match(home, /nextMission/);
 assert.match(home, /法則遠征地圖/);
 assert.match(home, /先預測/);
+const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
+assert.match(index, /explore\.html/);
 assert.equal(artAssets.size, 33);
 
 console.log("V5 site integrity: routes, 33 art assets, recoverable flame, campaign guidance and procedural audio OK");
