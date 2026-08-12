@@ -47,13 +47,22 @@ function saveEvidenceLedger() {
   localStorage.setItem("law-temple-v5-evidence-ledger", JSON.stringify(evidenceLedger));
 }
 
-function dependencyContext(level) {
+function dependencySnapshot(level) {
+  const snapshot = {};
+  for (const dependency of level.stateContract?.dependencyManifest || []) {
+    const source = evidenceLedger[dependency.valueRef];
+    if (dependency.provenance === "upstream_evidence" && source) snapshot[dependency.valueRef] = source.evidenceVersionId;
+  }
+  return snapshot;
+}
+
+function dependencyContext(level, dependencyVersionSnapshot = {}) {
   const manifest = level.stateContract?.dependencyManifest || [];
   const upstreamEvidence = {};
   for (const dependency of manifest) {
     if (dependency.provenance === "upstream_evidence" && evidenceLedger[dependency.valueRef]) upstreamEvidence[dependency.valueRef] = evidenceLedger[dependency.valueRef];
   }
-  return { upstreamEvidence };
+  return { upstreamEvidence, dependencyVersionSnapshot };
 }
 
 function storeHandoffEvidence(evidence) {
@@ -202,7 +211,7 @@ function renderStage(level, index, session) {
         <section class="flame-panel" aria-label="神火狀態"><div><span>修復者神火</span><strong data-flame>${flameGlyphs()}</strong></div><small data-flame-note>錯誤會使神火衰減；歸零時守護者會啟動回溯，不會封鎖學習。</small></section>
         <h1>${level.title}</h1><p class="mission">${level.storyProblem || level.mission}</p>
         <div class="metadata"><div><span>任務類型</span><strong>${level.skill}</strong></div><div><span>需要能力</span><strong>${level.prerequisites}</strong></div><div><span>預估時間</span><strong>${level.time}</strong></div></div>
-        <section class="known"><h2>進入前能確認的事</h2><ul>${(level.prePlanKnown || level.known).map(item => `<li>${item}</li>`).join("")}</ul></section>
+        <section class="known"><h2>進入前能確認的事</h2><ul>${stageKnownItems(level).map(item => `<li>${item}</li>`).join("")}</ul></section>
         <section class="hint-box"><button type="button" data-hint>${hintOpen ? "收起線索" : "查看一層線索"}</button><p data-hint-text aria-live="polite">${hintOpen ? level.hint : ""}</p></section>
       </aside>
       <div class="game-panel">
@@ -222,6 +231,18 @@ function renderStage(level, index, session) {
   if (track === "foundation") bindFoundation(level, index);
   else bindAdvanced(level, index);
   drawVisual(level, { value: level.control?.base, phase: "pre-plan" });
+}
+
+function stageKnownItems(level) {
+  const items = [...(level.prePlanKnown || level.known)];
+  if (level.code !== "C-A4") return items;
+  const speed = evidenceLedger["chrono.meet.entrySpeed"];
+  const distance = evidenceLedger["chrono.meet.availableDistance"];
+  if (!speed || !distance) return [...items, "上游軌跡尚未完成：星門不會自行補入預設初速或距離"];
+  return [...items,
+    `已鎖定上游初速 ${formatControlValue(speed.value)} m/s（版本 ${speed.evidenceVersionId}）`,
+    `已鎖定可用距離 ${formatControlValue(distance.value)} m（版本 ${distance.evidenceVersionId}）`
+  ];
 }
 
 function flameGlyphs() {
@@ -397,10 +418,11 @@ function bindFoundation(level, index) {
       evidenceValid = false;
       episodeTrace.status = "stale";
       if (episodeTrace.evidenceRun) episodeTrace.evidenceRun.supersededBy = `${level.code}:pending`;
-      reasonStep.classList.remove("visible");
-      selectedReason = null;
+      main.querySelector("[data-submit-reason]").disabled = true;
       feedback.className = "feedback";
-      feedback.textContent = "你改動了機關；剛才的痕跡已不再代表現在的狀態。請重新運轉一次。";
+      feedback.textContent = selectedReason
+        ? "你改動了機關；剛才的痕跡已失效，但守護者替你保留了尚未送出的理由。重新運轉後再決定是否提交。"
+        : "你改動了機關；剛才的痕跡已不再代表現在的狀態。請重新運轉一次。";
     } else {
       feedback.className = "feedback";
       feedback.textContent = "機關正在回應你的調整；調到目標後，讓它完整運轉一次。";
@@ -437,6 +459,7 @@ function bindFoundation(level, index) {
     sound("evidence");
     drawVisual(level, { value, phase: "evidence" });
     reasonStep.classList.add("visible");
+    main.querySelector("[data-submit-reason]").disabled = !selectedReason;
     feedback.className = "feedback";
     const outcome = physics.evaluateFoundation(level, episodeTrace.evidenceRun.observable, selectedPrediction, null);
     feedback.textContent = outcome.predictionOK ? "機關留下的痕跡與你原先的想法一致。現在說明原因。" : "機關的回應和你原先想的不一樣。看看痕跡，再選出原因。";
@@ -467,6 +490,7 @@ function bindFoundation(level, index) {
 function bindAdvanced(level, index) {
   let selectedModel = null;
   let evidenceValid = false;
+  const lockedDependencySnapshot = dependencySnapshot(level);
   const feedback = main.querySelector("[data-feedback]");
   const calculation = main.querySelector("[data-calculation-step]");
   main.querySelectorAll("[data-model]").forEach(button => button.addEventListener("click", () => {
@@ -494,7 +518,7 @@ function bindAdvanced(level, index) {
     attempts += 1;
     updateAttempts("已啟動", attempts);
     const values = Object.fromEntries([...main.querySelectorAll("[data-answer]")].map(input => [input.dataset.answer, input.value]));
-    const dependencies = dependencyContext(level);
+    const dependencies = dependencyContext(level, lockedDependencySnapshot);
     const proposedEvidence = physics.deriveEvidenceState(level, { phase: "evidence", values, ...dependencies });
     const outcome = physics.evaluateAdvanced(level, proposedEvidence, selectedModel, values);
     const { results, modelOK, valuesOK, upstreamOK } = outcome;
@@ -509,7 +533,7 @@ function bindAdvanced(level, index) {
     episodeTrace.status = modelOK && valuesOK ? "supported" : "contradicted";
     sound("evidence");
     drawVisual(level, { phase: "evidence", values, modelOK, valuesOK, ...dependencies });
-    markChoice("model", evidence.expectedModel);
+    markChoice("model", evidence.domainEvidence.solution?.model);
     if (!upstreamOK) {
       evidenceValid = false;
       episodeTrace.status = "upstream_inconclusive";
@@ -601,9 +625,26 @@ function drawVisual(level, state) {
     ctx.restore();
     return;
   }
-  drawEvidenceApparatus(ctx, level, evidence, revealed, w, h);
-  if (observed && level.inputs) drawCandidateComparison(ctx, level, evidence, w, h);
+  const renderEvidence = renderStateFromDomain(evidence.domainEvidence);
+  drawEvidenceApparatus(ctx, level, renderEvidence, revealed, w, h);
+  if (observed && level.inputs) drawCandidateComparison(ctx, level, renderEvidence, w, h);
   ctx.restore();
+}
+
+function renderStateFromDomain(domainResult) {
+  const observable = domainResult.observable;
+  return {
+    observed: domainResult.observed,
+    certified: domainResult.certified,
+    value: observable.controlValue,
+    values: observable.candidateValues,
+    wave: observable.wave,
+    magnetic: observable.magnetic,
+    optics: observable.optics,
+    chrono: observable.chrono,
+    dependencyResolution: observable.dependencyResolution,
+    domainEvidence: domainResult
+  };
 }
 
 function drawEvidenceApparatus(ctx, level, evidence, revealed, w, h) {
@@ -617,29 +658,42 @@ function drawEvidenceApparatus(ctx, level, evidence, revealed, w, h) {
 }
 
 function drawPreviewApparatus(ctx, level, evidence, w, h) {
-  const previewEvidence = {
-    ...evidence,
-    observed: true,
-    wave: evidence.wave ? { ...evidence.wave, observed: true } : evidence.wave,
-    domainEvidence: { ...evidence.domainEvidence, observed: false, previewActive: true }
-  };
-  const originalFillText = ctx.fillText;
-  ctx.fillText = () => {};
-  drawEvidenceApparatus(ctx, level, previewEvidence, false, w, h);
-  ctx.fillText = originalFillText;
-  const observable = evidence.domainEvidence.observable;
-  const x = 185 + observable.normalizedControl * 630;
+  const preview = physics.derivePreviewGeometry(level, evidence);
+  for (const primitive of preview.primitives) drawPreviewPrimitive(ctx, primitive, preview, w, h);
+  const x = 185 + preview.normalizedControl * 630;
   ctx.strokeStyle = "rgba(255,220,139,.72)";
   ctx.lineWidth = 5;
   ctx.beginPath(); ctx.moveTo(185,472); ctx.lineTo(815,472); ctx.stroke();
   dot(ctx, x, 472, "#ffdc8b", 12);
-  label(ctx, `${level.control.label} ${formatControlValue(observable.controlValue)}${level.control.unit ? ` ${level.control.unit}` : ""}`, 185, 515, "#ffdc8b", 18);
+  label(ctx, `${level.control.label} ${formatControlValue(preview.controlValue)}${level.control.unit ? ` ${level.control.unit}` : ""}`, 185, 515, "#ffdc8b", 18);
   label(ctx, "完整痕跡待運轉", 690, 515, "#dbe3ef", 15);
+}
+
+function drawPreviewPrimitive(ctx, primitive, preview, w, h) {
+  if (primitive === "apparatus-silhouette") {
+    ctx.fillStyle = "rgba(220,230,242,.18)"; ctx.fillRect(270,205,460,190);
+  } else if (primitive === "control-dial" || primitive === "time-dial" || primitive === "radius-dial") {
+    ctx.strokeStyle = "rgba(255,220,139,.75)"; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.arc(500,300,88,Math.PI*.75,Math.PI*2.25); ctx.stroke();
+    const angle = Math.PI*.75 + preview.normalizedControl*Math.PI*1.5;
+    arrow(ctx,500,300,500+Math.cos(angle)*70,300+Math.sin(angle)*70,"#ffdc8b","");
+  } else if (primitive === "optical-boundary") {
+    ctx.strokeStyle = "#dce6f2"; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(150,300); ctx.lineTo(850,300); ctx.stroke();
+  } else if (primitive === "surface-normal") {
+    ctx.strokeStyle = "rgba(220,230,242,.65)"; ctx.lineWidth = 4; ctx.setLineDash([9,8]); ctx.beginPath(); ctx.moveTo(500,135); ctx.lineTo(500,465); ctx.stroke(); ctx.setLineDash([]);
+  } else if (primitive === "incident-ray") {
+    const theta = Number(preview.opticalIncidence || 0)*Math.PI/180;
+    arrow(ctx,500-Math.sin(theta)*200,300+Math.cos(theta)*200,500,300,"#ffdc8b","");
+  } else if (primitive === "launch-platform") {
+    ctx.strokeStyle = "#dce6f2"; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(160,180); ctx.lineTo(160,430); ctx.lineTo(820,430); ctx.stroke(); dot(ctx,210,180,"#ffdc8b",13);
+  } else if (primitive === "central-body") {
+    dot(ctx,500,300,"#ffbf5c",55);
+  }
 }
 
 function drawCandidateComparison(ctx, level, evidence, w, h) {
   const candidates = evidence.values || {};
-  const expected = Object.fromEntries((evidence.expectedInputs || []).map(field => [field.id, field]));
+  const expected = Object.fromEntries((evidence.domainEvidence.solution?.outputs || []).map(field => [field.id, field]));
   const fields = level.inputs.map(field => {
     const candidate = Number(candidates[field.id]);
     const reference = expected[field.id];
@@ -810,6 +864,12 @@ function drawChronoVisual(ctx, type, evidence, revealed, w, h) {
   const velocityGraph=type === "brake" || type === "chrono-stop";
   graphAxes(ctx,x,y,gw,gh,"t",velocityGraph?"速度 v":"位置 x");
   const chrono=evidence.chrono;
+  if(!chrono){
+    label(ctx,"上游軌跡不足或版本已失效",280,285,"#ffbd93",24);
+    label(ctx,"先回到相遇機關，重新取得同一版本的入站資料。",220,335,"#dbe3ef",18);
+    evidenceCaption(ctx,"chrono.brake｜上游證據不足，未繪製煞車曲線");
+    return;
+  }
   const line=(color,x1,y1,x2,y2)=>{ctx.strokeStyle=color;ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();};
   const plot=(key,color,maxValue)=>{
     const series=chrono?.series||[],duration=chrono?.duration||1,cap=maxValue||Math.max(1,...series.map(point=>Math.abs(point[key]||0)));

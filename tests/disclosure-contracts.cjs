@@ -46,7 +46,16 @@ function texts(level, state) {
 for (const level of auditedLevels) {
   assert.ok(level.assessedClaim, `${level.code}: claim must be declared before disclosure review`);
   const before = texts(level, { phase: "pre-plan", value: level.control?.base });
-  for (const field of level.inputs ? physics.solveAdvanced(level) : []) {
+  const disclosureUpstream = level.code === "C-A4" ? {
+    "chrono.meet.entrySpeed": { value: 20, evidenceVersionId: "disclosure:C-A3", contractVersion: "chrono-meet-v2", status: "supported" },
+    "chrono.meet.availableDistance": { value: 50, evidenceVersionId: "disclosure:C-A3", contractVersion: "chrono-meet-v2", status: "supported" }
+  } : undefined;
+  const disclosureSnapshot = level.code === "C-A4" ? {
+    "chrono.meet.entrySpeed": "disclosure:C-A3",
+    "chrono.meet.availableDistance": "disclosure:C-A3"
+  } : undefined;
+  const solvedFields = level.inputs ? physics.deriveEvidenceState(level, { phase: "pre-plan", values: {}, upstreamEvidence: disclosureUpstream, dependencyVersionSnapshot: disclosureSnapshot }).domainEvidence.solution.outputs : [];
+  for (const field of solvedFields) {
     const escaped = String(field.answer).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const answerToken = new RegExp(`(^|[^0-9.])${escaped}(?![0-9.])`);
     const answerWithUnit = field.unit ? new RegExp(`(^|[^0-9.])${escaped}\\s*${field.unit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![0-9A-Za-z])`) : null;
@@ -86,12 +95,26 @@ const previewLeakChecks = {
   "O-F3": /全反射|臨界角/,
   "NUC-F2": /A.?[−-]4|Z.?[−-]2|α.*衰變/,
   "C-F2": /會合時間|碰撞|安全通過/,
-  "H-F2": /週期變長|速率.*縮短/,
+  "H-F2": /ΔT|熱容量較小|溫升.*較大/,
   "NWT-F4": /水平速度不變|vₓ.*固定/
 };
 for (const [code, leakPattern] of Object.entries(previewLeakChecks)) {
   assert.doesNotMatch(texts(byCode[code], { phase: "preview", value: byCode[code].control.target }), leakPattern, `${code}: preview leaks the assessed conclusion before the apparatus runs`);
 }
+
+for (const level of auditedFoundation) {
+  assert.ok(Array.isArray(level.disclosureContract.previewGeometry), `${level.code}: preview geometry whitelist must be declared per level`);
+  const preview = physics.derivePreviewGeometry(level, physics.deriveEvidenceState(level, { phase: "preview", value: level.control.target }));
+  assert.deepEqual(preview.primitives, level.disclosureContract.previewGeometry, `${level.code}: preview renderer must consume the declared whitelist exactly`);
+  assert.ok(preview.primitives.every(primitive => physics.previewPrimitiveCatalog.includes(primitive)), `${level.code}: preview uses an unknown geometry primitive`);
+}
+
+assert.deepEqual(physics.derivePreviewGeometry(byCode["O-F3"], physics.deriveEvidenceState(byCode["O-F3"], { phase: "preview", value: 60 })).primitives,
+  ["optical-boundary", "surface-normal", "incident-ray"], "O-F3 preview may show the controlled incident ray, but no reflected/refracted outcome branch");
+assert.deepEqual(physics.derivePreviewGeometry(byCode["NWT-F4"], physics.deriveEvidenceState(byCode["NWT-F4"], { phase: "preview", value: 4 })).primitives,
+  ["launch-platform", "time-dial"], "NWT-F4 preview must not draw the projectile path or velocity components");
+assert.deepEqual(physics.derivePreviewGeometry(byCode["S-F3"], physics.deriveEvidenceState(byCode["S-F3"], { phase: "preview", value: 4 })).primitives,
+  ["central-body", "radius-dial"], "S-F3 preview may show the radius control, but no orbit, orbital velocity or force arrows");
 
 const waveLevel = byCode["W-F1"];
 const slow = physics.deriveWaveEvidence(waveLevel, { phase: "evidence", value: 2 });
@@ -123,19 +146,26 @@ const chronoMeet = physics.deriveEvidenceState(byCode["C-F2"], { phase: "evidenc
 assert.equal(chronoMeet.contractId, "chrono.meet");
 assert.ok(Math.abs(chronoMeet.meetingTime - 6) < 1e-9);
 const upstreamEvidence = {
-  "chrono.meet.entrySpeed": { value: 20, evidenceVersionId: "C-A3:evidence:handoff", status: "supported" },
-  "chrono.meet.availableDistance": { value: 50, evidenceVersionId: "C-A3:evidence:handoff", status: "supported" }
+  "chrono.meet.entrySpeed": { value: 11, evidenceVersionId: "C-A3:evidence:handoff", contractVersion: "chrono-meet-v2", status: "supported" },
+  "chrono.meet.availableDistance": { value: 70, evidenceVersionId: "C-A3:evidence:handoff", contractVersion: "chrono-meet-v2", status: "supported" }
 };
-const chronoBrakeEvidence = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 50 }, upstreamEvidence });
+const dependencyVersionSnapshot = {
+  "chrono.meet.entrySpeed": "C-A3:evidence:handoff",
+  "chrono.meet.availableDistance": "C-A3:evidence:handoff"
+};
+const chronoBrakeEvidence = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 15.125 }, upstreamEvidence, dependencyVersionSnapshot });
 const chronoBrake = chronoBrakeEvidence.chrono;
 assert.equal(chronoBrake.contractId, "chrono.brake");
-assert.ok(Math.abs(chronoBrake.stopPosition - 50) < 1e-9);
+assert.equal(chronoBrake.initialSpeed, 11, "Chrono brake must consume the resolved upstream entry speed");
+assert.equal(chronoBrake.gatePosition, 70, "Chrono brake must consume the resolved upstream available distance");
+assert.ok(Math.abs(chronoBrake.stopPosition - 15.125) < 1e-9);
 assert.equal(chronoBrake.conclusion, "safe_stop");
 assert.match(chronoBrakeEvidence.evidenceVersionId, /^ev:C-A4:/);
 assert.equal(chronoBrakeEvidence.dependencyResolution.status, "supported");
 assert.equal(chronoBrakeEvidence.causalMutationCase.changed, true, "Chrono brake must prove that changing deceleration changes the outcome");
 const missingUpstream = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 50 } });
 assert.equal(missingUpstream.dependencyResolution.status, "upstream_inconclusive", "Chrono brake must not silently invent missing upstream evidence");
+assert.equal(missingUpstream.chrono, null, "Chrono brake must not fall back to hard-coded 20/50 when upstream evidence is missing");
 assert.equal(missingUpstream.certified, false, "inconclusive upstream evidence cannot certify a downstream result");
 const staleUpstream = physics.deriveEvidenceState(byCode["C-A4"], {
   phase: "evidence",
@@ -148,10 +178,28 @@ const staleUpstream = physics.deriveEvidenceState(byCode["C-A4"], {
 });
 assert.equal(staleUpstream.dependencyResolution.status, "upstream_inconclusive", "stale Chrono dependencies must be marked honestly");
 
+const staleContractEvidence = structuredClone(upstreamEvidence);
+staleContractEvidence["chrono.meet.entrySpeed"].contractVersion = "chrono-meet-v1";
+const staleContract = physics.deriveEvidenceState(byCode["C-A4"], {
+  phase: "evidence",
+  values: { distance: 15.125 },
+  upstreamEvidence: staleContractEvidence,
+  dependencyVersionSnapshot
+});
+assert.equal(staleContract.dependencyResolution.status, "upstream_inconclusive", "a mismatched upstream contract must invalidate the brake result");
+assert.equal(staleContract.chrono, null, "invalid Chrono contracts must not render a brake trace");
+
+const cA3Evidence = physics.deriveEvidenceState(byCode["C-A3"], { phase: "evidence", values: { time: 10 }, modelOK: true, valuesOK: true });
+assert.equal(cA3Evidence.handoffEvidence["chrono.meet.entrySpeed"].value, cA3Evidence.chrono.second.v0, "Chrono handoff speed must come from the actual meet trace");
+assert.equal(cA3Evidence.handoffEvidence["chrono.meet.availableDistance"].value, cA3Evidence.chrono.meetingPosition, "Chrono handoff distance must come from the actual meet trace");
+
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
 assert.match(app, /physics\.interferenceAt\(px,py,wave\.params\)/, "wave renderer must consume the domain model, not fixed decoration");
 assert.doesNotMatch(app, /第一步｜鎖定質性預測|第二步｜操作變因並取得證據|第三步｜用證據選出理由/);
 assert.doesNotMatch(app, />鎖定預測<|預測已鎖定|結果不會在預測前顯示/);
 assert.doesNotMatch(app, /外軌道：速率與引力箭長同步縮短|vₓ（固定）/, "conclusion-bearing geometry labels must not be unconditional renderer strings");
+assert.doesNotMatch(app, /function drawPreviewApparatus[\s\S]*?observed:\s*true[\s\S]*?function drawCandidateComparison/, "preview must never pretend that evidence was observed");
+assert.doesNotMatch(app, /ctx\.fillText\s*=\s*\(\)\s*=>\s*\{\}/, "preview disclosure cannot be implemented by erasing labels after drawing answer geometry");
+assert.match(app, /dependencyVersionSnapshot/, "the runtime path must carry the locked dependency version snapshot");
 
 console.log(`Disclosure contracts: all ${auditedLevels.length} levels reviewed claim-by-claim, including ${auditedFoundation.length} preview layers; water, magnetic, optics and Chrono causal mutations guarded`);

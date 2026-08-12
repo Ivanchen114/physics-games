@@ -58,6 +58,8 @@ assert.match(app, /physics\.deriveEvidenceState/);
 assert.match(app, /physics\.evaluateFoundation/);
 assert.match(app, /physics\.evaluateAdvanced/);
 assert.match(app, /physics\.describeEvidence/);
+assert.match(app, /function renderStateFromDomain\(domainResult\)/, "renderer must receive a projection of the shared domain result");
+assert.match(app, /drawEvidenceApparatus\(ctx, level, renderEvidence/, "evidence renderer must not receive the parallel root evidence state");
 assert.doesNotMatch(app, /level\.prediction\.correct|level\.reason\.correct|level\.correctModel|level\.explanation/);
 assert.match(app, /physics\.interferenceAt/);
 assert.match(app, /episodeTrace\.comparisonPlan/);
@@ -79,20 +81,25 @@ for (const level of levels.filter(item => item.track === "foundation")) {
   assert.equal(physics.evaluateFoundation(level, evidence, conclusion.prediction, wrongReason).reasonOK, false, `${level.code}: a wrong reason must be rejected`);
 }
 for (const level of levels.filter(item => item.track === "advanced")) {
-  const solved = physics.solveAdvanced(level);
-  const exactValues = Object.fromEntries(solved.map(field => [field.id, field.answer]));
   const upstreamEvidence = level.code === "C-A4" ? {
-    "chrono.meet.entrySpeed": { value: 20, evidenceVersionId: "audit:C-A3", status: "supported" },
-    "chrono.meet.availableDistance": { value: 50, evidenceVersionId: "audit:C-A3", status: "supported" }
+    "chrono.meet.entrySpeed": { value: 20, evidenceVersionId: "audit:C-A3", contractVersion: "chrono-meet-v2", status: "supported" },
+    "chrono.meet.availableDistance": { value: 50, evidenceVersionId: "audit:C-A3", contractVersion: "chrono-meet-v2", status: "supported" }
   } : undefined;
-  const evidence = physics.deriveEvidenceState(level, { phase: "evidence", values: exactValues, upstreamEvidence });
+  const dependencyVersionSnapshot = level.code === "C-A4" ? {
+    "chrono.meet.entrySpeed": "audit:C-A3",
+    "chrono.meet.availableDistance": "audit:C-A3"
+  } : undefined;
+  const seedEvidence = physics.deriveEvidenceState(level, { phase: "evidence", values: {}, upstreamEvidence, dependencyVersionSnapshot });
+  const solved = seedEvidence.domainEvidence.solution.outputs;
+  const exactValues = Object.fromEntries(solved.map(field => [field.id, field.answer]));
+  const evidence = physics.deriveEvidenceState(level, { phase: "evidence", values: exactValues, upstreamEvidence, dependencyVersionSnapshot });
   const expectedModel = physics.deriveAdvancedModel(level);
   const exact = physics.evaluateAdvanced(level, evidence, expectedModel, exactValues);
   assert.ok(exact.modelOK && exact.valuesOK, `${level.code}: domain solver output must satisfy its evaluation contract`);
   const first = solved[0];
   const mutation = Math.max(first.tolerance * 3, Math.max(1, Math.abs(first.answer)) * .1);
   const mutatedValues = { ...exactValues, [first.id]: first.answer + mutation };
-  const mutatedEvidence = physics.deriveEvidenceState(level, { phase: "evidence", values: mutatedValues, upstreamEvidence });
+  const mutatedEvidence = physics.deriveEvidenceState(level, { phase: "evidence", values: mutatedValues, upstreamEvidence, dependencyVersionSnapshot });
   const mutated = physics.evaluateAdvanced(level, mutatedEvidence, expectedModel, mutatedValues);
   assert.equal(mutated.valuesOK, false, `${level.code}: a material output mutation must be rejected`);
 }

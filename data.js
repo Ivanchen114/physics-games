@@ -8,6 +8,12 @@
   const reason = (question, labels) => ({ question, options: labels.map(([value, label]) => option(value, label)) });
   const control = (label, base, target, min, max, step, unit, kind = "variable") => ({ label, base, target, min, max, step, unit, kind });
   const input = (id, label, unit, tolerance) => ({ id, label, unit, tolerance });
+  const previewGeometryFor = level => {
+    if (level.code === "O-F3") return ["optical-boundary", "surface-normal", "incident-ray"];
+    if (level.code === "NWT-F4") return ["launch-platform", "time-dial"];
+    if (level.code === "S-F3") return ["central-body", "radius-dial"];
+    return level.control?.kind === "reveal" ? ["apparatus-silhouette"] : ["control-dial"];
+  };
 
   const temples = [
     {
@@ -44,7 +50,7 @@
           { code:"C-A1",title:"等速會合",summary:"由距離與時間求維持會合所需速度。",mission:"青車必須在 20 秒後抵達 120 公尺外的事件點。",skill:"等速運動",prerequisites:"v=Δx/Δt",time:"60–100 秒",image:"assets/chrono/time-1.webp",visual:"chrono-uniform",known:["位移 120 m","允許時間 20 s","等速直線運動"],models:[option("uniform","v = Δx / Δt"),option("accel","Δx = ½at²"),option("momentum","p = mv")],inputs:[input("speed","列車速度","m/s",.05)],explanation:"v=120/20=6 m/s。",hint:"題目沒有加速資訊，使用等速位移關係。"},
           { code:"C-A2",title:"加速會合",summary:"由靜止出發的位移與時間求加速度。",mission:"青車由靜止穿越 100 公尺長的加速環廊，必須在 10 秒抵達。",skill:"等加速度",prerequisites:"x=v₀t+½at²",time:"75–130 秒",image:"assets/chrono/time-2.webp",visual:"chrono-accel",known:["初速 0 m/s","位移 100 m","時間 10 s","加速度固定"],models:[option("accel","x = ½at²"),option("uniform","x = vt"),option("energy","v² = 2ax，直接令 v=10")],inputs:[input("acceleration","加速度","m/s²",.03)],explanation:"100=½×a×10²，所以 a=2 m/s²。",hint:"由靜止出發，初速項為零。"},
           { code:"C-A3",title:"延遲追擊",summary:"使用相對速度處理先行與延遲。",mission:"橙車以 4 m/s 先行 10 秒，青車再以 8 m/s 出發。",skill:"相對速度",prerequisites:"等速、代數",time:"75–140 秒",image:"assets/chrono/time-3.webp",visual:"chrono-delay",known:["橙車速度 4 m/s","橙車先行 10 s","青車速度 8 m/s"],models:[option("relative","t = 先行距離 / (8−4)"),option("sum","t = 先行距離 / (8+4)"),option("ignore","t = 先行距離 / 8")],inputs:[input("time","青車出發後追上時間","s",.1)],explanation:"橙車先行 40 m，追近速度為 4 m/s，所以需 10 s。",hint:"先算領先距離，再用兩車速度差求追近時間。"},
-          { code:"C-A4",title:"煞車收束",summary:"由初速與加速度求停止距離。",mission:"列車以 20 m/s 進入星門廊，固定減速度為 4 m/s²。",skill:"等加速度煞停",prerequisites:"v²=v₀²+2aΔx",time:"75–140 秒",image:"assets/chrono/time-4.webp",visual:"chrono-stop",known:["初速 20 m/s","末速 0 m/s","加速度 −4 m/s²"],models:[option("v2","0 = 20² + 2(−4)Δx"),option("linear","0 = 20 − 4Δx"),option("uniform","Δx = 20×4")],inputs:[input("distance","煞停距離","m",.2)],explanation:"0=400−8Δx，因此煞停距離為 50 m。",hint:"時間未知，可選不含時間的等加速度公式。"}
+          { code:"C-A4",title:"煞車收束",summary:"承接上游入站速度，以固定減速度求停止距離。",mission:"列車承接「延遲追擊」留下的入站速度與星門前可用距離；固定減速度為 4 m/s²。",skill:"等加速度煞停",prerequisites:"v²=v₀²+2aΔx、上游證據",time:"75–140 秒",image:"assets/chrono/time-4.webp",visual:"chrono-stop",known:["初速由延遲追擊的可追溯版本提供","可用距離由同一條上游軌跡提供","末速 0 m/s","加速度 −4 m/s²"],models:[option("v2","0 = v₀² + 2(−4)Δx"),option("linear","0 = v₀ − 4Δx"),option("uniform","Δx = v₀×4")],inputs:[input("distance","煞停距離","m",.2)],explanation:"從上游版本讀取 v₀ 與可用距離，再以 0=v₀²+2aΔx 求停止距離。",hint:"先確認上游版本有效；時間未知，可選不含時間的等加速度公式。"}
         ]
       }
     },
@@ -387,6 +393,7 @@
         afterRun: ["正式觀察結果", "因果理由"],
         afterEvaluation: ["結論", "完整解釋"]
       };
+      level.disclosureContract.previewGeometry = previewGeometryFor(level);
       level.stateContract = {
         contractId: `${temple.id}.${level.code.toLowerCase()}`,
         assessedClaim: level.assessedClaim,
@@ -491,8 +498,8 @@
       modelId: braking ? "constant_acceleration_stop" : level.code === "C-A2" ? "relative_accelerated_motion" : "uniform_relative_motion",
       stateValues: braking ? ["v0", "deceleration", "stopPosition"] : ["x1(t)", "x2(t)", "gap(t)", "meetingTime"],
       dependencyManifest: braking ? [
-        { valueRef: "chrono.meet.entrySpeed", provenance: "upstream_evidence" },
-        { valueRef: "chrono.meet.availableDistance", provenance: "upstream_evidence" },
+        { valueRef: "chrono.meet.entrySpeed", provenance: "upstream_evidence", contractVersion: "chrono-meet-v2" },
+        { valueRef: "chrono.meet.availableDistance", provenance: "upstream_evidence", contractVersion: "chrono-meet-v2" },
         { valueRef: "chrono.brake.deceleration", provenance: "scenario_constraint" }
       ] : []
     });
@@ -508,7 +515,7 @@
     "C-A1":["定時抵達","狹道入口在 120 m 外，二十秒後開門。刻入等速值，讓巡守車準時抵達而不是憑空瞬移。"],
     "C-A2":["加速入廊","巡守車由靜止出發，十秒內必須走完 100 m。選定加速法則，讓完整軌跡落在入口時窗。"],
     "C-A3":["延遲追擊","橙隊已取得四十公尺領先。算出青隊出發後的追及時刻，避免兩隊在狹道內相撞。"],
-    "C-A4":["星門煞停","承接狹道出口的 20 m/s 入站速度；星門只留下 50 m。算出停止位置，確認巡守車能停在安全窗內。"]
+    "C-A4":["星門煞停","承接上一段狹道留下的入站速度與可用距離；若版本仍有效，算出停止位置並確認巡守車能否停在安全窗內。"]
   };
   for (const level of [...chrono.tracks.foundation, ...chrono.tracks.advanced]) [level.storyTeaser, level.storyProblem] = chronoStories[level.code];
   const rawEvidenceExceptions = {

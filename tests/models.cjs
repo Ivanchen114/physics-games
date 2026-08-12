@@ -14,8 +14,36 @@ for (const temple of data.temples) {
     assert.equal(evidence.domainEvidence.family, temple.id, `${level.code}: renderer, evaluator and explanation need one ${temple.id} domain state`);
     assert.equal(evidence.domainEvidence.contractId, level.stateContract.contractId, `${level.code}: domain state must identify the assessed contract`);
     assert.ok(evidence.domainEvidence.observable, `${level.code}: domain state must expose renderable observables`);
+    if (level.prediction) assert.ok(evidence.domainEvidence.conclusion, `${level.code}: foundation scoring conclusion must live inside the domain result`);
+    if (level.inputs) assert.ok(evidence.domainEvidence.solution, `${level.code}: advanced scoring solution must live inside the domain result`);
+    assert.ok(Array.isArray(evidence.domainEvidence.explanation), `${level.code}: explanation material must live inside the domain result`);
   }
 }
+
+const pivotLevel = data.temples.find(t => t.id === "titans").tracks.foundation[0];
+const pivotEvidence = physics.deriveEvidenceState(pivotLevel, { phase: "evidence", value: pivotLevel.control.target });
+pivotEvidence.domainEvidence.conclusion = { prediction: "test-domain-prediction", reason: "test-domain-reason", evidenceVersion: "domain-test" };
+assert.deepEqual(
+  physics.evaluateFoundation(pivotLevel, pivotEvidence, "test-domain-prediction", "test-domain-reason"),
+  { predictionOK: true, reasonOK: true, expectedPrediction: "test-domain-prediction", expectedReason: "test-domain-reason", evidenceVersion: "domain-test" },
+  "foundation evaluator must consume the domain result, not a parallel qualitative model"
+);
+const bicepsLevel = data.temples.find(t => t.id === "titans").tracks.advanced[0];
+const bicepsEvidence = physics.deriveEvidenceState(bicepsLevel, { phase: "evidence", values: { force: 1 } });
+bicepsEvidence.domainEvidence.solution = { model: "domain-model", outputs: [{ id: "force", answer: 1, tolerance: .01 }] };
+assert.equal(physics.evaluateAdvanced(bicepsLevel, bicepsEvidence, "domain-model", { force: 1 }).valuesOK, true, "advanced evaluator must consume the domain solution");
+pivotEvidence.domainEvidence.explanation = ["單一領域說明測試"];
+assert.match(physics.describeEvidence(pivotLevel, pivotEvidence), /單一領域說明測試/, "explanation must consume the domain result rather than static fallback copy");
+const leverLevel = data.temples.find(t => t.id === "titans").tracks.foundation[1];
+const leverEvidence = physics.deriveEvidenceState(leverLevel, { phase: "evidence", value: leverLevel.control.target });
+leverEvidence.value = leverLevel.control.base;
+assert.equal(physics.deriveQualitativeConclusion(leverLevel, leverEvidence).prediction, "increase", "foundation evaluation must ignore mutated parallel root state and read the domain observable");
+
+const opticsReflection = data.temples.find(t => t.id === "optics").tracks.foundation[0];
+const opticsReflectionEvidence = physics.deriveEvidenceState(opticsReflection, { phase: "evidence", value: opticsReflection.control.target });
+const opticsReflectionDescription = physics.describeEvidence(opticsReflection, opticsReflectionEvidence);
+assert.match(opticsReflectionDescription, /反射角/, "reflection evidence must describe the reflected ray");
+assert.doesNotMatch(opticsReflectionDescription, /折射角/, "reflection evidence must not report an unrelated refracted ray");
 
 assert.ok(Math.abs(physics.tricepsWeight(300, 5, 30, 150) - 100) < 1e-9);
 assert.ok(Math.abs(physics.deadliftWeight(2250, 8, 300, 40, 60) - 100) < 1e-9);
@@ -55,7 +83,7 @@ assert.equal(physics.solveAdvanced(closedTube)[0].answer, 200);
 const pitchLevel = data.temples.find(t => t.id === "resonance").tracks.foundation[0];
 const pitchEvidence = physics.deriveEvidenceState(pitchLevel, { phase: "evidence", value: pitchLevel.control.target });
 assert.deepEqual(
-  { prediction: pitchEvidence.conclusion.prediction, reason: pitchEvidence.conclusion.reason },
+  { prediction: pitchEvidence.domainEvidence.conclusion.prediction, reason: pitchEvidence.domainEvidence.conclusion.reason },
   { prediction: "higher", reason: "frequency-count" },
   "RES-F1 must justify higher pitch with increased oscillations per second, not with loudness"
 );
