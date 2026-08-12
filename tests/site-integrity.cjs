@@ -60,6 +60,7 @@ assert.match(home, /法則遠征地圖/);
 assert.match(home, /先押下判斷/);
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
 assert.match(index, /explore\.html/);
+assert.doesNotMatch(index, /先立下預測|操作變因|取得證據/);
 assert.equal(artAssets.size, 33);
 
 console.log("V5 site integrity: routes, 33 art assets, recoverable flame, campaign guidance and procedural audio OK");
