@@ -23,10 +23,14 @@ const canvasContext = new Proxy({}, {
 });
 const canvas = { width: 1000, height: 562, getContext: () => canvasContext };
 const main = { querySelector: selector => selector === "[data-canvas]" ? canvas : null };
+const storageState = new Map([["law-temple-v5-evidence-ledger", JSON.stringify({
+  "chrono.meet.entrySpeed": { value: 8, evidenceVersionId: "tab-a-v1", contractVersion: "chrono-meet-v2", status: "supported" },
+  "chrono.meet.availableDistance": { value: 80, evidenceVersionId: "tab-a-v1", contractVersion: "chrono-meet-v2", status: "supported" }
+})]]);
 const sandbox = {
   console,
   document: { body: { dataset: {} }, documentElement: { style: { setProperty: () => {} } }, querySelector: selector => selector === "#main" ? main : null },
-  localStorage: { getItem: () => null, setItem: () => {} },
+  localStorage: { getItem: key => storageState.get(key) ?? null, setItem: (key, value) => storageState.set(key, value) },
   location: { search: "", href: "http://local/" }, history: {}, URL, URLSearchParams, setTimeout, clearTimeout,
   window: { TempleData: data, TemplePhysics: physics, addEventListener: () => {}, matchMedia: () => ({ matches: true }) }
 };
@@ -34,7 +38,7 @@ sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 const source = fs.readFileSync(require.resolve("../app.js"), "utf8")
   .replace(/window\.addEventListener\("popstate", render\);\s*render\(\);\s*$/, "")
-  + "\n;globalThis.__drawVisual = drawVisual;";
+  + "\n;globalThis.__drawVisual = drawVisual; globalThis.__dependencySnapshot = dependencySnapshot; globalThis.__dependencyContext = dependencyContext;";
 vm.runInContext(source, sandbox, { filename: "app.js" });
 
 function texts(level, state) {
@@ -193,6 +197,17 @@ const cA3Evidence = physics.deriveEvidenceState(byCode["C-A3"], { phase: "eviden
 assert.equal(cA3Evidence.handoffEvidence["chrono.meet.entrySpeed"].value, cA3Evidence.chrono.second.v0, "Chrono handoff speed must come from the actual meet trace");
 assert.equal(cA3Evidence.handoffEvidence["chrono.meet.availableDistance"].value, cA3Evidence.chrono.meetingPosition, "Chrono handoff distance must come from the actual meet trace");
 
+const lockedTabASnapshot = sandbox.__dependencySnapshot(byCode["C-A4"]);
+storageState.set("law-temple-v5-evidence-ledger", JSON.stringify({
+  "chrono.meet.entrySpeed": { value: 8, evidenceVersionId: "tab-b-v2", contractVersion: "chrono-meet-v2", status: "supported" },
+  "chrono.meet.availableDistance": { value: 80, evidenceVersionId: "tab-b-v2", contractVersion: "chrono-meet-v2", status: "supported" }
+}));
+const crossTabContext = sandbox.__dependencyContext(byCode["C-A4"], lockedTabASnapshot);
+assert.equal(crossTabContext.upstreamEvidence["chrono.meet.entrySpeed"].evidenceVersionId, "tab-b-v2", "C-A4 verification must reread the latest cross-tab ledger instead of the page-load copy");
+const crossTabBrake = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 8 }, ...crossTabContext });
+assert.equal(crossTabBrake.dependencyResolution.status, "upstream_inconclusive", "a newer C-A3 version from another tab must invalidate the already-open C-A4");
+assert.equal(crossTabBrake.chrono, null, "stale C-A4 must not silently calculate with the old locked version");
+
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
 assert.match(app, /physics\.interferenceAt\(px,py,wave\.params\)/, "wave renderer must consume the domain model, not fixed decoration");
 assert.doesNotMatch(app, /第一步｜鎖定質性預測|第二步｜操作變因並取得證據|第三步｜用證據選出理由/);
@@ -201,5 +216,6 @@ assert.doesNotMatch(app, /外軌道：速率與引力箭長同步縮短|vₓ（�
 assert.doesNotMatch(app, /function drawPreviewApparatus[\s\S]*?observed:\s*true[\s\S]*?function drawCandidateComparison/, "preview must never pretend that evidence was observed");
 assert.doesNotMatch(app, /ctx\.fillText\s*=\s*\(\)\s*=>\s*\{\}/, "preview disclosure cannot be implemented by erasing labels after drawing answer geometry");
 assert.match(app, /dependencyVersionSnapshot/, "the runtime path must carry the locked dependency version snapshot");
+assert.match(app, /上游資料已過期/, "cross-tab version invalidation must tell the player that the upstream trace changed");
 
 console.log(`Disclosure contracts: all ${auditedLevels.length} levels reviewed claim-by-claim, including ${auditedFoundation.length} preview layers; water, magnetic, optics and Chrono causal mutations guarded`);

@@ -58,16 +58,17 @@ function dependencySnapshot(level) {
 
 function dependencyContext(level, dependencyVersionSnapshot = {}) {
   const manifest = level.stateContract?.dependencyManifest || [];
+  const latestEvidenceLedger = readEvidenceLedger();
   const upstreamEvidence = {};
   for (const dependency of manifest) {
-    if (dependency.provenance === "upstream_evidence" && evidenceLedger[dependency.valueRef]) upstreamEvidence[dependency.valueRef] = evidenceLedger[dependency.valueRef];
+    if (dependency.provenance === "upstream_evidence" && latestEvidenceLedger[dependency.valueRef]) upstreamEvidence[dependency.valueRef] = latestEvidenceLedger[dependency.valueRef];
   }
   return { upstreamEvidence, dependencyVersionSnapshot };
 }
 
 function storeHandoffEvidence(evidence) {
   if (!evidence?.handoffEvidence) return;
-  Object.assign(evidenceLedger, evidence.handoffEvidence);
+  Object.assign(evidenceLedger, readEvidenceLedger(), evidence.handoffEvidence);
   saveEvidenceLedger();
 }
 
@@ -538,7 +539,10 @@ function bindAdvanced(level, index) {
       evidenceValid = false;
       episodeTrace.status = "upstream_inconclusive";
       feedback.className = "feedback";
-      feedback.innerHTML = "<strong>星門沒有收到上一段狹道軌跡。</strong><br>請先重新完成「延遲追擊」，讓入站速度與可用距離留下可追溯版本；這次不扣神火。";
+      const staleUpstream = proposedEvidence.dependencyResolution.entries.some(entry => entry.reason === "stale_upstream_evidence" || entry.reason === "stale_upstream_contract");
+      feedback.innerHTML = staleUpstream
+        ? "<strong>上游資料已過期。</strong><br>另一個分頁已更新「延遲追擊」的軌跡；本頁不會沿用舊版本結算。請返回關卡地圖再進入本關，重新鎖定最新資料；這次不扣神火。"
+        : "<strong>星門沒有收到上一段狹道軌跡。</strong><br>請先重新完成「延遲追擊」，讓入站速度與可用距離留下可追溯版本；這次不扣神火。";
     } else if (modelOK && valuesOK) completeLevel(level, index, feedback);
     else {
       const wrongFields = results.filter(result => !result.ok).map(result => level.inputs.find(field => field.id === result.id).label);
