@@ -595,11 +595,11 @@ function drawVisual(level, state) {
 
 function drawCandidateComparison(ctx, level, evidence, w, h) {
   const candidates = evidence.values || {};
-  const expected = Object.fromEntries((evidence.expectedInputs || []).map(field => [field.id, field.answer]));
+  const expected = Object.fromEntries((evidence.expectedInputs || []).map(field => [field.id, field]));
   const fields = level.inputs.map(field => {
     const candidate = Number(candidates[field.id]);
     const reference = expected[field.id];
-    return `${field.label}：你刻 ${Number.isFinite(candidate) ? formatControlValue(candidate) : "—"}${field.unit}／機關 ${formatModelValue(reference, field.tolerance)}${field.unit}`;
+    return `${field.label}：你刻 ${Number.isFinite(candidate) ? formatControlValue(candidate) : "—"}${field.unit}／機關 ${formatModelValue(reference?.answer, reference?.tolerance)}${field.unit}`;
   });
   ctx.fillStyle = evidence.certified ? "rgba(11,61,54,.90)" : "rgba(68,29,35,.92)";
   ctx.fillRect(105, 490, w - 210, 48);

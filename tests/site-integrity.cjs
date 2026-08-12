@@ -44,6 +44,7 @@ assert.match(app, /function controlMarkup/);
 assert.match(app, /data-control-option/);
 assert.match(app, /type === "pivot"/);
 assert.match(app, /二頭肌拉力/);
+assert.match(app, /formatModelValue\(reference\?\.answer, reference\?\.tolerance\)/, "candidate comparison must format the model value with its state-contract tolerance");
 for (const renderer of ["drawNewtonEvidence", "drawResonanceEvidence", "drawEMWaveEvidence", "drawQuantumEvidence", "drawNuclearEvidence"]) assert.match(app, new RegExp(renderer));
 assert.match(app, /law-temple-v4-player/);
 assert.match(app, /神火耗盡/);
