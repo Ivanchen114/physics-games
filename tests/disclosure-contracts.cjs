@@ -91,7 +91,27 @@ for (const level of auditedLevels) {
   assert.doesNotMatch(`${evidenceText} ${physics.accessibleProjection(level, evidence)}`, /物理模型|那就是變因|痕跡就是證據/, `${level.code}: formal certification language must wait until evaluation`);
   assert.match(evaluationText, /證據.*物理模型|物理模型.*證據/, `${level.code}: evaluation must name evidence and physical model`);
   if (level.inputs) assert.doesNotMatch(evaluationText, /變因/, `${level.code}: advanced certification must not invent a variable operation`);
-  else assert.match(evaluationText, /變因/, `${level.code}: foundation certification must name the operated variable`);
+  else {
+    switch (level.control.kind) {
+      case "variable":
+        assert.match(evaluationText, /那就是變因/, `${level.code}: variable certification must name the operated variable`);
+        break;
+      case "observation-window":
+        assert.match(evaluationText, /觀察條件/);
+        assert.doesNotMatch(evaluationText, /那就是變因/);
+        break;
+      case "case-selector":
+        assert.match(evaluationText, /案例/);
+        assert.doesNotMatch(evaluationText, /那就是變因/);
+        break;
+      case "reveal":
+        assert.match(evaluationText, /喚醒了機關/);
+        assert.doesNotMatch(evaluationText, /那就是變因/);
+        break;
+      default:
+        assert.fail(`${level.code}: unknown control.kind ${String(level.control.kind)}`);
+    }
+  }
   assert.ok(evaluationAria.includes(evaluationText), `${level.code}: evaluation aria and visible certification must consume the same material`);
   assert.doesNotMatch(`${evidenceText} ${evaluationText} ${evaluationAria}`, /NaN|undefined/, `${level.code}: certification must never expose a non-finite placeholder`);
 }
@@ -181,6 +201,47 @@ for (const code of ["O-F4", "O-A3", "O-A4"]) {
   const evidence = physics.deriveEvidenceState(level, level.inputs ? { phase: "evidence", values: {} } : { phase: "evidence", value: level.control.target });
   assert.ok(Number.isFinite(evidence.domainEvidence.observable.magnification), `${code}: optics family must copy magnification into the shared observable`);
   assert.doesNotMatch(physics.describeEvidence(level, evidence), /NaN|undefined/, `${code}: optical evidence description must contain a finite magnification`);
+}
+const expectedLensRows = [
+  [1, 1 / 30, 15, -.5],
+  [1.5, 1 / 40, 40 / 3, -1 / 3],
+  [2, 1 / 60, 12, -.2],
+  [2.5, 1 / 120, 120 / 11, -1 / 11],
+  [3, 0, 10, 0]
+];
+for (const [parallelism, inverseObjectDistance, imageDistance, magnification] of expectedLensRows) {
+  const projection = physics.deriveLensProjection("O-F4", parallelism);
+  assert.ok(Math.abs(projection.inverseObjectDistance - inverseObjectDistance) < 1e-12);
+  assert.ok(Math.abs(projection.imageDistance - imageDistance) < 1e-12);
+  assert.ok(Math.abs(projection.magnification - magnification) < 1e-12);
+  assert.equal(projection.mode, "focus");
+}
+assert.throws(() => physics.deriveLensProjection("O-F4", .9), /定義域/);
+assert.throws(() => physics.deriveLensProjection("O-F4", 3.1), /定義域/);
+const parallelProjection = physics.deriveLensProjection("O-F4", 3);
+assert.equal(parallelProjection.objectDistance, "infinite_distance");
+assert.equal(parallelProjection.imageClass, "point-focus");
+assert.equal(parallelProjection.orientation, null);
+assert.equal(parallelProjection.scaleClass, null);
+assert.equal(Object.is(parallelProjection.magnification, -0), false);
+assert.match(physics.describeOpticsProjection(parallelProjection), /完全平行.*焦點 F.*di = 10\.00 cm ＝ f/);
+assert.doesNotMatch(physics.describeOpticsProjection(parallelProjection), /正立|倒立|放大|縮小|Infinity/);
+const oA3Projection = physics.deriveLensProjection("O-A3");
+const oA4Projection = physics.deriveLensProjection("O-A4");
+assert.equal(oA3Projection.mode, "image");
+assert.equal(oA4Projection.mode, "image");
+assert.ok(Math.abs(oA4Projection.imageHeight + 2) < 1e-12);
+assert.match(physics.describeOpticsProjection(oA3Projection), /do = 30\.00 cm.*di = 15\.00 cm.*m = -0\.500.*倒立、縮小/);
+assert.match(physics.describeOpticsProjection(oA4Projection), /m = -0\.500.*hi = -2\.00 cm.*倒立、縮小/);
+const magnifiedProjection = physics.classifyLensProjection({ ...oA4Projection, magnification: 2 });
+assert.match(physics.describeOpticsProjection(magnifiedProjection), /m = 2\.000.*hi = 8\.00 cm.*正立、放大/);
+const mutatedEvidenceProjection = physics.deriveEvidenceState(byCode["O-A4"], { phase: "evaluation", values: { height: 8 }, modelOK: true, valuesOK: true });
+mutatedEvidenceProjection.domainEvidence.observable.opticsProjection = magnifiedProjection;
+assert.match(physics.accessibleProjection(byCode["O-A4"], mutatedEvidenceProjection), /m = 2\.000.*hi = 8\.00 cm.*正立、放大/, "ARIA must recompute from the mutated structured lens projection");
+for (const level of auditedLevels) {
+  const condition = level.inputs ? { phase: "evaluation", values: {}, modelOK: true, valuesOK: true } : { phase: "evaluation", value: level.control.target, valuesOK: true };
+  const output = `${physics.describeEvidence(level, physics.deriveEvidenceState(level, condition))} ${physics.accessibleProjection(level, physics.deriveEvidenceState(level, condition))}`;
+  assert.doesNotMatch(output, /Infinity/, `${level.code}: no player-facing physics projection may format Infinity`);
 }
 const snellWrongEntry = physics.deriveEvidenceState(byCode["O-A1"], { phase: "evidence", values: { angle: 70 } });
 assert.ok(Math.abs(snellWrongEntry.optics.refraction - 19.4712) < 1e-3, "O-A1 physical refraction ray must stay on Snell's law when the player enters 70 degrees");

@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const vm = require("node:vm");
 const data = require("../data.js");
 
 const codes = [];
@@ -46,6 +47,28 @@ const momentum = data.temples.find(t => t.id === "momentum");
 assert.match(momentum.curriculum.foundation, /加深加廣選修/);
 assert.match(water.curriculum.advanced, /必修.*選修/);
 const byCode = Object.fromEntries(data.temples.flatMap(temple => [...temple.tracks.foundation, ...temple.tracks.advanced]).map(level => [level.code, level]));
+const foundationLevels = data.temples.flatMap(temple => temple.tracks.foundation);
+const expectedObservationWindows = ["C-F2", "EMW-F1", "NWT-F4", "Q-F2", "RES-F2", "S-F2"];
+const expectedCaseSelectors = ["NUC-F2", "NUC-F4", "P-F3", "QTM-F2", "QTM-F4", "RES-F4", "U-F1", "U-F2", "U-F3", "U-F4"];
+const expectedReveal = ["G-F1"];
+function assertControlKindPartition(levels) {
+  const actualKindCodes = kind => levels.filter(level => level.control.kind === kind).map(level => level.code).sort();
+  assert.equal(levels.length, 68, "新增初階關卡時必須同步完成 control.kind 分類；這道阻力是刻意的防呆");
+  assert.deepEqual(actualKindCodes("observation-window"), expectedObservationWindows);
+  assert.deepEqual(actualKindCodes("case-selector"), expectedCaseSelectors);
+  assert.deepEqual(actualKindCodes("reveal"), expectedReveal);
+  const expectedVariables = levels.map(level => level.code).filter(code => ![...expectedObservationWindows, ...expectedCaseSelectors, ...expectedReveal].includes(code)).sort();
+  assert.deepEqual(actualKindCodes("variable"), expectedVariables);
+  assert.deepEqual([...new Set(levels.map(level => level.control.kind))].sort(), ["case-selector", "observation-window", "reveal", "variable"]);
+}
+assertControlKindPartition(foundationLevels);
+assert.throws(() => assertControlKindPartition(foundationLevels.filter(level => level.code !== "NUC-F2")), "deleting a named classification must turn the exact-set test red");
+assert.throws(() => assertControlKindPartition([...foundationLevels, { code: "FAKE-F1", control: { kind: "variable" } }]), "adding a foundation level without a reviewed classification must turn the test red");
+const dataSource = fs.readFileSync(require.resolve("../data.js"), "utf8");
+assert.doesNotMatch(dataSource, /kind\s*=\s*["']variable["']/, "control.kind must remain required instead of silently defaulting to variable");
+const loadDataSource = source => vm.runInNewContext(source, { module: { exports: {} }, globalThis: {} }, { filename: "mutated-data.js" });
+assert.throws(() => loadDataSource(dataSource.replace(/,\s*"variable"\)/, ")")), /control\.kind 必須明確指定/, "omitting an explicit kind must fail while data loads");
+assert.throws(() => loadDataSource(dataSource.replace(/"variable"\)/, '"case_selector")')), /control\.kind 必須明確指定/, "an unknown kind must fail while data loads");
 const finalQuestions = {
   "G-F1": "當石臂開始轉動，你認為肘關節在其中扮演哪一種角色？",
   "W-F1": "當你將水眼的振動節奏（頻率由 2 Hz 增加到 4 Hz）加快時，池面的同心波紋會怎麼改變？",

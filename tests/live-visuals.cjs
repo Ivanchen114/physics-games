@@ -72,6 +72,33 @@ operations = [];
 sandbox.__drawVisual(door, { evidenceState: doorEvidence });
 assert.notEqual(mutatedSignature, JSON.stringify(operations), "G-F2 renderer must consume paired domain response angles rather than fixed decoration");
 
+const allLevels = data.temples.flatMap(temple => [...temple.tracks.foundation, ...temple.tracks.advanced]);
+const byCode = Object.fromEntries(allLevels.map(level => [level.code, level]));
+function evaluationLabels(level, condition) {
+  operations = [];
+  const evidenceState = physics.deriveEvidenceState(level, { phase: "evaluation", valuesOK: true, modelOK: true, ...condition });
+  sandbox.__drawVisual(level, { evidenceState });
+  return operations.filter(entry => entry[0] === "fillText").map(entry => String(entry[1])).join(" | ");
+}
+const focusLabels = evaluationLabels(byCode["O-F4"], { value: 3 });
+assert.match(focusLabels, /完全平行.*焦點 F.*di = 10\.00 cm ＝ f/);
+assert.doesNotMatch(focusLabels, /正立|倒立|放大|縮小|Infinity/);
+const lensLabels = evaluationLabels(byCode["O-A3"], { values: { distance: 15 } });
+assert.match(lensLabels, /do = 30\.00 cm.*di = 15\.00 cm.*m = -0\.500.*倒立、縮小/);
+const magnifyLabels = evaluationLabels(byCode["O-A4"], { values: { height: -2 } });
+assert.match(magnifyLabels, /m = -0\.500.*hi = -2\.00 cm.*倒立、縮小/);
+const mutatedMagnify = physics.deriveEvidenceState(byCode["O-A4"], { phase: "evaluation", values: { height: -2 }, modelOK: true, valuesOK: true });
+mutatedMagnify.domainEvidence.observable.opticsProjection = physics.classifyLensProjection({
+  ...mutatedMagnify.domainEvidence.observable.opticsProjection,
+  magnification: 2
+});
+operations = [];
+sandbox.__drawVisual(byCode["O-A4"], { evidenceState: mutatedMagnify });
+const mutatedCanvasLabels = operations.filter(entry => entry[0] === "fillText").map(entry => String(entry[1])).join(" | ");
+const mutatedAria = physics.accessibleProjection(byCode["O-A4"], mutatedMagnify);
+assert.match(mutatedCanvasLabels, /正立、放大/);
+assert.match(mutatedAria, /正立、放大/);
+
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
 for (const family of ["Momentum", "Energy", "Electric", "Magnetic", "Optics", "Thermal", "Celestial", "Newton", "Resonance", "EMWave", "Quantum", "Nuclear"]) {
   assert.match(app, new RegExp(`draw${family}Evidence\\(ctx, type, evidence`), `${family} renderer must consume the shared domain evidence instead of a parallel raw value`);

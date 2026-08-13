@@ -1418,16 +1418,18 @@ function drawOpticsEvidence(ctx, type, evidence, revealed) {
   const interfaceY=315,normalX=500;
   const surface=()=>{ctx.strokeStyle="#d8e6f5";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(150,interfaceY);ctx.lineTo(850,interfaceY);ctx.stroke();ctx.setLineDash([10,8]);ctx.strokeStyle="#b8c5d5";ctx.beginPath();ctx.moveTo(normalX,135);ctx.lineTo(normalX,470);ctx.stroke();ctx.setLineDash([]);label(ctx,"法線",515,155,"#dce6f2",16);};
   if(type.includes("lens")||type.includes("magnify")) {
-    const lensX=500,axisY=315,scale=9,f=type.includes("calc")?10*scale:150,objectX=230,objectTop=205,parallelism=type.includes("calc")?3:Number(value),spread=(3-parallelism)*18;
+    const projection=evidence.domainEvidence.observable.opticsProjection;
+    if(!projection)throw new Error("lens renderer requires domainEvidence.observable.opticsProjection");
+    const lensX=500,axisY=315,scale=9,f=projection.focalLength*scale,objectDistance=projection.objectDistance,objectX=objectDistance==="infinite_distance"?170:lensX-objectDistance*scale,objectTop=205,parallelism=type==="optics-lens"?Number(value):1,spread=type==="optics-lens"?(3-parallelism)*18:0,imageX=lensX+projection.imageDistance*scale,imageY=axisY-(axisY-objectTop)*projection.magnification;
     ctx.strokeStyle="rgba(220,230,242,.5)";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(140,axisY);ctx.lineTo(860,axisY);ctx.stroke();
     ctx.strokeStyle="#b99cff";ctx.lineWidth=9;ctx.beginPath();ctx.ellipse(lensX,axisY,38,150,0,0,Math.PI*2);ctx.stroke();dot(ctx,lensX-f,axisY,"#ffdc8b",8);dot(ctx,lensX+f,axisY,"#ffdc8b",8);label(ctx,"F",lensX+f-6,axisY+35,"#ffdc8b",16);
-    arrow(ctx,objectX,axisY,objectX,objectTop,"#ff806b","物體");
-    if(observed&&(type.includes("magnify")||type.includes("calc"))){const imageX=lensX+Math.max(20,Math.min(300,Math.abs(evidence.optics.imageDistance)*scale)),imageY=axisY-(axisY-objectTop)*evidence.optics.magnification;arrow(ctx,objectX,objectTop,lensX,objectTop,"#ffd36d","");arrow(ctx,lensX,objectTop,imageX,imageY,"#ffd36d","");arrow(ctx,objectX,objectTop,lensX,axisY,"#65ded2","");arrow(ctx,lensX,axisY,imageX,imageY,"#65ded2","");arrow(ctx,imageX,axisY,imageX,imageY,"#ff806b","物理光路交會");if(Number.isFinite(evidence.optics.studentImageDistance)){const studentX=lensX+evidence.optics.studentImageDistance*scale;ctx.strokeStyle="#ff8f86";ctx.lineWidth=4;ctx.setLineDash([8,7]);ctx.beginPath();ctx.moveTo(studentX,190);ctx.lineTo(studentX,430);ctx.stroke();ctx.setLineDash([]);label(ctx,"你刻的位置",studentX-45,180,"#ffb6ac",16);}}
-    else if(observed){
-      for(const offset of [-70,0,70]){const entryY=axisY+offset,entryStartY=entryY+spread*(offset/70||0);arrow(ctx,170,entryStartY,lensX,entryY,"#ffd36d","");arrow(ctx,lensX,entryY,lensX+250,axisY+(axisY-entryY)*250/f,"#65ded2","");}
-      dot(ctx,lensX+f,axisY,"#ffdc8b",11);label(ctx,`平行度 ${parallelism} 級`,205,455,"#a1fff5",18);
+    if(type!=="optics-lens")arrow(ctx,objectX,axisY,objectX,objectTop,"#ff806b","物體");
+    if(observed&&projection.mode==="image"){arrow(ctx,objectX,objectTop,lensX,objectTop,"#ffd36d","");arrow(ctx,lensX,objectTop,imageX,imageY,"#ffd36d","");arrow(ctx,objectX,objectTop,lensX,axisY,"#65ded2","");arrow(ctx,lensX,axisY,imageX,imageY,"#65ded2","");arrow(ctx,imageX,axisY,imageX,imageY,"#ff806b","物理光路交會");if(Number.isFinite(evidence.optics.studentImageDistance)){const studentX=lensX+evidence.optics.studentImageDistance*scale;ctx.strokeStyle="#ff8f86";ctx.lineWidth=4;ctx.setLineDash([8,7]);ctx.beginPath();ctx.moveTo(studentX,190);ctx.lineTo(studentX,430);ctx.stroke();ctx.setLineDash([]);label(ctx,"你刻的位置",studentX-45,180,"#ffb6ac",16);}}
+    else if(observed&&projection.mode==="focus"){
+      for(const offset of [-70,0,70]){const entryY=axisY+offset,entryStartY=entryY+spread*(offset/70||0);arrow(ctx,170,entryStartY,lensX,entryY,"#ffd36d","");arrow(ctx,lensX,entryY,imageX,axisY,"#65ded2","");}
+      dot(ctx,imageX,axisY,"#ffdc8b",11);label(ctx,`平行度 ${parallelism} 級`,205,455,"#a1fff5",18);
     }
-    if(revealed)evidenceCaption(ctx,type.includes("magnify")?"m = −di/do = −2：倒立、放大 2 倍":"平行主軸光折射後通過焦點；中央光線近似直行");return;
+    if(revealed)evidenceCaption(ctx,physics.describeOpticsProjection(projection));return;
   }
   surface();
   const calc=type.includes("calc"),optics=evidence.optics,incidence=optics?.incidence ?? (type.includes("refraction")?45:Number(value));

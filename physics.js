@@ -78,6 +78,85 @@
     return { imageDistance, magnification: -imageDistance / objectDistance };
   }
 
+  const lensModes = Object.freeze({ "O-F4": "focus", "O-A3": "image", "O-A4": "image" });
+
+  function classifyLensProjection(raw) {
+    const inverseObjectDistance = Number(raw.inverseObjectDistance);
+    const imageDistance = Number(raw.imageDistance);
+    const magnification = Number(raw.magnification) + 0;
+    if (![inverseObjectDistance, imageDistance, magnification, Number(raw.focalLength)].every(Number.isFinite)) {
+      throw new Error("lens projection contains a non-finite physical value");
+    }
+    const pointFocus = inverseObjectDistance === 0;
+    const absoluteMagnification = Math.abs(magnification);
+    const objectHeight = raw.objectHeight === null || raw.objectHeight === undefined ? null : Number(raw.objectHeight);
+    const imageHeight = objectHeight === null ? raw.imageHeight : objectHeight * magnification;
+    return {
+      ...raw,
+      magnification,
+      imageHeight,
+      imageClass: pointFocus ? "point-focus" : "converging-image",
+      rayState: pointFocus ? "point-focus" : "converging-image",
+      orientation: pointFocus ? null : magnification < 0 ? "倒立" : magnification > 0 ? "正立" : null,
+      scaleClass: pointFocus ? null : nearly(absoluteMagnification, 1, 1e-9) ? "等大" : absoluteMagnification > 1 ? "放大" : "縮小"
+    };
+  }
+
+  function deriveLensProjection(levelOrCode, controlValue) {
+    const code = typeof levelOrCode === "string" ? levelOrCode : levelOrCode?.code;
+    const mode = lensModes[code];
+    if (!mode) throw new Error(`${String(code)} is not a supported lens projection level`);
+    const focalLength = 10;
+    let inverseObjectDistance;
+    if (code === "O-F4") {
+      const parallelism = Number(controlValue);
+      if (!Number.isFinite(parallelism) || parallelism < 1 || parallelism > 3) {
+        throw new Error(`O-F4 光束平行度超出定義域 [1, 3]：${String(controlValue)}`);
+      }
+      inverseObjectDistance = (3 - parallelism) / 60;
+    } else {
+      inverseObjectDistance = 1 / 30;
+    }
+    const imageDistance = 1 / (1 / focalLength - inverseObjectDistance);
+    const magnification = -(imageDistance * inverseObjectDistance) + 0;
+    const objectDistance = inverseObjectDistance === 0 ? "infinite_distance" : 1 / inverseObjectDistance;
+    const objectHeight = code === "O-A4" ? 4 : null;
+    const imageHeight = objectHeight === null ? null : objectHeight * magnification;
+    return classifyLensProjection({
+      code,
+      mode,
+      focalLength,
+      inverseObjectDistance,
+      objectDistance,
+      imageDistance,
+      magnification,
+      objectHeight,
+      imageHeight
+    });
+  }
+
+  function describeOpticsProjection(projection) {
+    if (!projection) throw new Error("optics projection is required");
+    const di = fixedObservation(projection.imageDistance, 2, "optics.projection.imageDistance");
+    const f = fixedObservation(projection.focalLength, 2, "optics.projection.focalLength");
+    if (projection.rayState === "point-focus") {
+      return `入射光完全平行主軸；像收斂到像側焦點 F；像距 di = ${di} cm ＝ f`;
+    }
+    if (projection.mode === "focus") {
+      const distanceBeyondFocus = projection.imageDistance - projection.focalLength;
+      return `入射光尚未完全平行；像距 di = ${di} cm；像點位於像側焦點 F 外 ${fixedObservation(distanceBeyondFocus, 2, "optics.projection.distanceBeyondFocus")} cm（f = ${f} cm）`;
+    }
+    if (projection.mode !== "image" || !projection.orientation || !projection.scaleClass) {
+      throw new Error("image-mode lens projection lacks a physical image classification");
+    }
+    const objectDistance = projection.objectDistance === "infinite_distance"
+      ? "平行光（物距無限遠）"
+      : `物距 do = ${fixedObservation(projection.objectDistance, 2, "optics.projection.objectDistance")} cm`;
+    const m = fixedObservation(projection.magnification, 3, "optics.projection.magnification");
+    const height = projection.imageHeight === null ? "" : `；像高 hi = ${fixedObservation(projection.imageHeight, 2, "optics.projection.imageHeight")} cm`;
+    return `${objectDistance}；像距 di = ${di} cm；放大率 m = ${m}${height}；${projection.orientation}、${projection.scaleClass}`;
+  }
+
   function chronoMeeting({ first = { x0: 20, v0: 2, a: 0 }, second = { x0: 0, v0: 4, a: 0 }, duration = 10, samples = 41 } = {}) {
     const positionAt = (body, time) => body.x0 + body.v0 * time + .5 * body.a * time * time;
     const velocityAt = (body, time) => body.v0 + body.a * time;
@@ -360,7 +439,10 @@
   }
 
   function describeEvidence(level, evidence) {
-    const material = evidence.domainEvidence?.explanation;
+    const domain = evidence.domainEvidence;
+    const material = domain?.family === "optics" && domain.observable?.opticsProjection
+      ? deriveDomainExplanation(level, domain.family, domain.observable, evidence, domain.conclusion, domain.solution)
+      : domain?.explanation;
     if (!Array.isArray(material)) throw new Error(`${level.code}: missing domain explanation material`);
     return material.join(" ");
   }
@@ -540,6 +622,7 @@
       observable.critical = evidence.optics.critical;
       observable.imageDistance = evidence.optics.imageDistance;
       observable.magnification = evidence.optics.magnification;
+      observable.opticsProjection = evidence.optics.projection;
     } else if (family === "thermal") {
       observable.temperatureFactor = value / Math.max(1, base);
       observable.pressureFactor = level.visual.includes("gas") ? value / 300 : null;
@@ -644,7 +727,7 @@
     if (family === "optics") {
       if (observable.visual.includes("reflection")) return `入射角 ${fixedObservation(observable.incidence, 2, "optics.incidence")}°，反射角 ${fixedObservation(observable.reflection, 2, "optics.reflection")}°`;
       if (observable.visual.includes("tir") || observable.visual.includes("critical")) return `入射角 ${fixedObservation(observable.incidence, 2, "optics.incidence")}°，臨界角 ${fixedObservation(observable.critical, 2, "optics.critical")}°，${observable.refraction === null ? "沒有折射光" : "仍有折射光"}`;
-      if (observable.visual.includes("lens") || observable.visual.includes("magnify")) return `薄透鏡模型像距 ${fixedObservation(observable.imageDistance, 2, "optics.imageDistance")} cm，放大率 ${fixedObservation(observable.magnification, 3, "optics.magnification")}`;
+      if (observable.visual.includes("lens") || observable.visual.includes("magnify")) return describeOpticsProjection(observable.opticsProjection);
       return `入射角 ${fixedObservation(observable.incidence, 2, "optics.incidence")}°，折射角 ${observable.refraction === null ? "無" : `${fixedObservation(observable.refraction, 2, "optics.refraction")}°`}`;
     }
     if (family === "thermal") return observable.temperatureDifference === null ? `溫度因子 ${fixedObservation(observable.temperatureFactor, 3, "thermal.temperatureFactor")}${observable.pressureFactor === null ? "" : `，壓力因子 ${fixedObservation(observable.pressureFactor, 3, "thermal.pressureFactor")}`}` : `兩物體溫差降至 ${fixedObservation(observable.temperatureDifference, 2, "thermal.temperatureDifference")}°C`;
@@ -663,18 +746,42 @@
   }
 
   // Formal epistemic terms appear only after the player has acted: the temple
-  // names an action as a variable, a recorded response as evidence, and the
-  // chosen relationship as a physical model. They are not pre-task labels.
+  // distinguishes a variable, observation window, case selector or reveal;
+  // the recorded response becomes evidence and the relationship becomes a
+  // physical model. These are not pre-task workflow labels.
   function deriveDomainExplanation(level, family, observable, evidence, conclusion, solution) {
     const observation = domainObservation(family, observable, evidence);
-    if (evidence.phase !== "evaluation") return [`本次機關觀察：${observation}。`];
+    const observationText = observation.replace(/。+$/u, "");
+    if (evidence.phase !== "evaluation") return [`本次機關觀察：${observationText}。`];
     if (conclusion) {
       const unit = level.control?.unit ? ` ${level.control.unit}` : "";
       const base = observable.controlBase;
       const target = observable.controlValue;
+      let actionSentence;
+      let evidenceSentence;
+      switch (level.control.kind) {
+        case "variable":
+          actionSentence = `你這一輪只動了${level.control.label}（${base}${unit} → ${target}${unit}）—— 在法則的語言裡，那就是變因。`;
+          evidenceSentence = `機關留下的痕跡就是證據：當${level.control.label}由 ${base}${unit} 變為 ${target}${unit}，${observationText}。`;
+          break;
+        case "observation-window":
+          actionSentence = `你這一輪沒有改動機關本身，只把觀察挪到${level.control.label}＝${target}${unit} —— 在法則的語言裡，那是觀察條件，不是變因。`;
+          evidenceSentence = `機關留下的痕跡就是證據：在${level.control.label}＝${target}${unit} 這個時刻／位置上，${observationText}。`;
+          break;
+        case "case-selector":
+          actionSentence = `你這一輪切換的是不同的${level.control.label}（${base}${unit} → ${target}${unit}）—— 你不是在同一個案例內連續調一個量，而是在幾個預先存在的案例之間切換比較。`;
+          evidenceSentence = `機關留下的痕跡就是證據：在${level.control.label}＝${target}${unit} 這個案例中，${observationText}。`;
+          break;
+        case "reveal":
+          actionSentence = "你這一輪只是喚醒了機關；這一關沒有可調的變因，你要判斷的是眼前已經存在的結構。";
+          evidenceSentence = `機關留下的痕跡就是證據：${observationText}。`;
+          break;
+        default:
+          throw new Error(`${level.code}: unknown control.kind ${String(level.control.kind)}`);
+      }
       return [
-        `你這一輪只動了${level.control.label}（${base}${unit} → ${target}${unit}）—— 在法則的語言裡，那就是變因。`,
-        `機關留下的痕跡就是證據：當${level.control.label}由 ${base}${unit} 變為 ${target}${unit}，${observation}。`,
+        actionSentence,
+        evidenceSentence,
         `讀懂這道痕跡靠的是「${level.skill}」這個物理模型 —— ${level.stateContract.explanation}`,
         `所以本次判讀是「${outputLabel(level, "prediction", conclusion.prediction)}」，依據是「${outputLabel(level, "reason", conclusion.reason)}」。`
       ];
@@ -690,10 +797,11 @@
         return `${label}＝${value}${unit}`;
       }).join("；");
       const status = solution.status === "upstream_inconclusive" ? "這次證據不足" : evidence.certified ? "這次的刻印與模型一致" : "這次的刻印不支持模型";
+      const projectionEvidence = family === "optics" && observable.opticsProjection ? `${observationText}；` : "";
       return [
         `你選的物理模型是「${modelLabel}」。`,
         `你據此刻入的是${inputLabels}。`,
-        `機關依你的模型與輸入留下的痕跡就是證據：${outputEvidence || "本次未取得可判讀的模型輸出"}。`,
+        `機關依你的模型與輸入留下的痕跡就是證據：${projectionEvidence}${outputEvidence || "本次未取得可判讀的模型輸出"}。`,
         `${status} —— ${level.stateContract.explanation}`
       ];
     }
@@ -726,7 +834,12 @@
     }
     const observation = domainObservation(domain.family, domain.observable, evidence);
     if (phase === "evidence") return `${level.title}的本次機關痕跡。${observation}。`;
-    if (phase === "evaluation") return `${level.title}的法則授證。${domain.explanation.join(" ")}`;
+    if (phase === "evaluation") {
+      const material = domain.family === "optics" && domain.observable?.opticsProjection
+        ? deriveDomainExplanation(level, domain.family, domain.observable, evidence, domain.conclusion, domain.solution)
+        : domain.explanation;
+      return `${level.title}的法則授證。${material.join(" ")}`;
+    }
     throw new Error(`${level.code}: unsupported disclosure phase ${phase}`);
   }
 
@@ -807,7 +920,7 @@
         : level.visual === "optics-refraction" ? 45 : 30;
       const n1 = level.visual.includes("tir") || level.visual.includes("critical") ? 1.5 : 1;
       const n2 = level.visual.includes("tir") || level.visual.includes("critical") ? 1 : (level.visual === "optics-refraction" ? evidence.value : 1.5);
-      const lens = thinLens(10, 30);
+      const projection = lensModes[level.code] ? deriveLensProjection(level, evidence.value) : null;
       evidence.optics = {
         incidence,
         reflection: incidence,
@@ -815,8 +928,9 @@
         studentAngle: Number.isFinite(values.angle) ? values.angle : null,
         studentRefraction: Number.isFinite(values.angle) ? values.angle : null,
         critical: boundaryCritical,
-        imageDistance: lens.imageDistance,
-        magnification: lens.magnification,
+        imageDistance: projection?.imageDistance ?? null,
+        magnification: projection?.magnification ?? null,
+        projection,
         studentImageDistance: Number.isFinite(values.distance) ? values.distance : null,
         studentImageHeight: Number.isFinite(values.height) ? values.height : null
       };
@@ -889,6 +1003,9 @@
     snellAngle,
     criticalAngle,
     thinLens,
+    classifyLensProjection,
+    deriveLensProjection,
+    describeOpticsProjection,
     chronoMeeting,
     chronoBrake,
     interferenceAt,
