@@ -19,6 +19,7 @@ let episodeTrace = null;
 let canvasResizeObserver = null;
 let lastVisualRequest = null;
 let canvasTypography = { cssScale: 1 };
+let stageDependencyCapture = null;
 
 document.body.dataset.track = track;
 document.documentElement.style.setProperty("--temple-color", temple.color);
@@ -50,13 +51,22 @@ function saveEvidenceLedger() {
   localStorage.setItem("law-temple-v5-evidence-ledger", JSON.stringify(evidenceLedger));
 }
 
-function dependencySnapshot(level) {
+function captureDependencies(level) {
+  const latestEvidenceLedger = readEvidenceLedger();
   const snapshot = {};
+  const upstreamEvidence = {};
   for (const dependency of level.stateContract?.dependencyManifest || []) {
-    const source = evidenceLedger[dependency.valueRef];
-    if (dependency.provenance === "upstream_evidence" && source) snapshot[dependency.valueRef] = source.evidenceVersionId;
+    const source = latestEvidenceLedger[dependency.valueRef];
+    if (dependency.provenance === "upstream_evidence" && source) {
+      upstreamEvidence[dependency.valueRef] = source;
+      snapshot[dependency.valueRef] = source.evidenceVersionId;
+    }
   }
-  return snapshot;
+  return { upstreamEvidence, dependencyVersionSnapshot: snapshot };
+}
+
+function dependencySnapshot(level) {
+  return captureDependencies(level).dependencyVersionSnapshot;
 }
 
 function dependencyContext(level, dependencyVersionSnapshot = {}) {
@@ -209,6 +219,7 @@ function renderStage(level, index, session) {
     evidenceRun: null,
     status: "planning"
   };
+  stageDependencyCapture = session?.dependencyCapture || captureDependencies(level);
   document.title = `${level.title}｜${temple.name} ${route.label}`;
   main.innerHTML = `<section class="stage-page">
     ${topbar(`${temple.name} · ${route.label}`, `${index + 1} / ${levels.length}`, "map")}
@@ -218,7 +229,7 @@ function renderStage(level, index, session) {
         <section class="flame-panel" aria-label="神火狀態"><div><span>修復者神火</span><strong data-flame>${flameGlyphs()}</strong></div><small data-flame-note>錯誤會使神火衰減；歸零時守護者會啟動回溯，不會封鎖學習。</small></section>
         <h1>${level.title}</h1><p class="mission">${level.storyProblem || level.mission}</p>
         <div class="metadata"><div><span>任務類型</span><strong>${level.skill}</strong></div><div><span>需要能力</span><strong>${level.prerequisites}</strong></div><div><span>預估時間</span><strong>${level.time}</strong></div></div>
-        <section class="known"><h2>進入前能確認的事</h2><ul>${stageKnownItems(level).map(item => `<li>${item}</li>`).join("")}</ul></section>
+        <section class="known"><h2>進入前能確認的事</h2><ul>${stageKnownItems(level, stageDependencyCapture).map(item => `<li>${item}</li>`).join("")}</ul></section>
         <section class="hint-box"><button type="button" data-hint>${hintOpen ? "收起線索" : "查看一層線索"}</button><p data-hint-text aria-live="polite">${hintOpen ? level.hint : ""}</p></section>
       </aside>
       <section class="workbench" data-workbench aria-label="物理機關工作檯">
@@ -236,16 +247,16 @@ function renderStage(level, index, session) {
     event.currentTarget.textContent = hintOpen ? "收起線索" : "查看一層線索";
   });
   if (track === "foundation") bindFoundation(level, index);
-  else bindAdvanced(level, index);
+  else bindAdvanced(level, index, stageDependencyCapture);
   drawVisual(level, { value: level.control?.base, phase: "pre-plan" });
   bindCanvasResize(level);
 }
 
-function stageKnownItems(level) {
+function stageKnownItems(level, capture = captureDependencies(level)) {
   const items = [...(level.prePlanKnown || level.known)];
   if (level.code !== "C-A4") return items;
-  const speed = evidenceLedger["chrono.meet.entrySpeed"];
-  const distance = evidenceLedger["chrono.meet.availableDistance"];
+  const speed = capture.upstreamEvidence["chrono.meet.entrySpeed"];
+  const distance = capture.upstreamEvidence["chrono.meet.availableDistance"];
   if (!speed || !distance) return [...items, "上游軌跡尚未完成：星門不會自行補入預設初速或距離"];
   return [...items,
     `已鎖定上游初速 ${formatControlValue(speed.value)} m/s（版本 ${speed.evidenceVersionId}）`,
@@ -284,7 +295,7 @@ function loseFlame(level) {
 }
 
 function stageSession() {
-  return { attempts, hintOpen, flame, mistakes, usedHint, rewinds, episodeTrace };
+  return { attempts, hintOpen, flame, mistakes, usedHint, rewinds, episodeTrace, dependencyCapture: stageDependencyCapture };
 }
 
 function foundationChallenge(level) {
@@ -507,15 +518,19 @@ function bindFoundation(level, index) {
       return;
     }
     evidenceValid = true;
+    const observable = physics.deriveEvidenceState(level, { value, phase: "evidence" });
     episodeTrace.evidenceRun = {
       version: `${level.code}:${attempts}`,
       plan: episodeTrace.comparisonPlan,
-      condition: { [level.control.label]: value },
-      observable: physics.deriveEvidenceState(level, { value, phase: "evidence" })
+      condition: level.code === "G-F2"
+        ? { pairedComparison: observable.domainEvidence.observable.pairedComparison }
+        : { [level.control.label]: value },
+      observable
     };
     episodeTrace.status = "evidence-recorded";
     sound("evidence");
-    drawVisual(level, { value, phase: "evidence" });
+    if (level.code === "G-F2") animateDoorRun(level, episodeTrace.evidenceRun.observable);
+    else drawVisual(level, { value, phase: "evidence" });
     reasonStep.classList.add("visible");
     setPhaseSummary("control", `本次條件：${formatControlValue(value)} ${level.control.unit} · 第 ${attempts} 次`);
     activatePhase("reason");
@@ -547,10 +562,10 @@ function bindFoundation(level, index) {
   });
 }
 
-function bindAdvanced(level, index) {
+function bindAdvanced(level, index, dependencyCapture = captureDependencies(level)) {
   let selectedModel = null;
   let evidenceValid = false;
-  const lockedDependencySnapshot = dependencySnapshot(level);
+  const lockedDependencySnapshot = dependencyCapture.dependencyVersionSnapshot;
   const feedback = main.querySelector("[data-feedback]");
   const calculation = main.querySelector("[data-calculation-step]");
   bindPhaseDock();
@@ -658,6 +673,14 @@ function completeLevel(level, index, feedback) {
   const rewardText = firstClear ? `<br><span class="reward-note">+${reward} 法則經驗・目前階級：${playerRank()}</span>` : `<br><span class="reward-note">重試完成，不重複計算經驗。</span>`;
   feedback.className = "feedback ok";
   const explanation = physics.describeEvidence(level, episodeTrace.evidenceRun.observable);
+  const evaluationEvidence = structuredCloneSafe(episodeTrace.evidenceRun.observable);
+  evaluationEvidence.phase = "evaluation";
+  evaluationEvidence.observed = true;
+  evaluationEvidence.certified = true;
+  evaluationEvidence.domainEvidence.phase = "evaluation";
+  evaluationEvidence.domainEvidence.observed = true;
+  evaluationEvidence.domainEvidence.certified = true;
+  drawVisual(level, { evidenceState: evaluationEvidence });
   feedback.innerHTML = `<strong>法則刻印已取得。</strong><br>${explanation}${rewardText}${trackEnding}<br><button type="button" class="primary-button next-button" data-next>${index + 1 < levels.length ? "前往下一關" : "返回關卡地圖"}</button>`;
   sound("success");
   if (firstClear) spawnSealBurst();
@@ -674,10 +697,10 @@ function drawVisual(level, state) {
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  const evidence = physics.deriveEvidenceState(level, state);
-  canvas.setAttribute?.("aria-label", evidence.phase === "pre-plan" ? `${level.title}的機關尚未啟動；${level.assessedClaim}` : evidence.phase === "preview" ? `${level.title}的可操作預覽；尚未完成一次運轉` : `${level.title}的本次機關痕跡；${level.assessedClaim}`);
+  const evidence = state?.evidenceState || physics.deriveEvidenceState(level, state);
+  canvas.setAttribute?.("aria-label", physics.accessibleProjection(level, evidence));
   const value = evidence.value;
-  const observed = evidence.phase === "evidence";
+  const observed = evidence.phase === "evidence" || evidence.phase === "evaluation";
   const revealed = observed && evidence.certified;
   const preview = evidence.phase === "preview";
   drawBasePlate(ctx, w, h, observed ? (evidence.certified ? "刻印與機關吻合" : "刻印與機關不合") : preview ? "機關調整中" : "機關尚未啟動");
@@ -696,6 +719,29 @@ function drawVisual(level, state) {
   drawEvidenceApparatus(ctx, level, renderEvidence, revealed, w, h);
   if (observed && level.inputs) drawCandidateComparison(ctx, level, renderEvidence, w, h);
   ctx.restore();
+}
+
+function animateDoorRun(level, evidenceState) {
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced || typeof window.requestAnimationFrame !== "function") {
+    drawVisual(level, { evidenceState });
+    return;
+  }
+  const duration = 720;
+  const start = window.performance?.now?.() ?? Date.now();
+  const frame = now => {
+    const elapsed = Math.max(0, Number(now) - start);
+    const progress = Math.min(1, elapsed / duration);
+    const eased = 1 - (1 - progress) ** 3;
+    const animated = structuredCloneSafe(evidenceState);
+    const pair = animated.domainEvidence.observable.pairedComparison;
+    pair.base.responseAngle *= eased;
+    pair.target.responseAngle *= eased;
+    drawVisual(level, { evidenceState: animated });
+    if (progress < 1) window.requestAnimationFrame(frame);
+    else drawVisual(level, { evidenceState });
+  };
+  window.requestAnimationFrame(frame);
 }
 
 function structuredCloneSafe(value) {
@@ -750,6 +796,7 @@ function renderStateFromDomain(domainResult) {
   const observable = domainResult.observable;
   return {
     observed: domainResult.observed,
+    phase: domainResult.phase,
     certified: domainResult.certified,
     value: observable.controlValue,
     values: observable.candidateValues,
@@ -758,6 +805,7 @@ function renderStateFromDomain(domainResult) {
     optics: observable.optics,
     chrono: observable.chrono,
     dependencyResolution: observable.dependencyResolution,
+    pairedComparison: observable.pairedComparison,
     domainEvidence: domainResult
   };
 }
@@ -803,6 +851,17 @@ function drawPreviewPrimitive(ctx, primitive, preview, w, h) {
     ctx.strokeStyle = "#dce6f2"; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(160,180); ctx.lineTo(160,430); ctx.lineTo(820,430); ctx.stroke(); dot(ctx,210,180,"#ffdc8b",13);
   } else if (primitive === "central-body") {
     dot(ctx,500,300,"#ffbf5c",55);
+  } else if (primitive === "stone-door") {
+    drawStoneDoor(ctx, 500, 300, 0, 360, "rgba(198,164,111,.82)");
+  } else if (primitive === "door-hinge") {
+    dot(ctx, 500, 300, "#ffd86f", 16); label(ctx, "門軸", 445, 345, "#ffdc8b", 18);
+  } else if (primitive === "door-candidates") {
+    dot(ctx, 620, 300, "#dbe3ef", 11); dot(ctx, 800, 300, "#dbe3ef", 11);
+    label(ctx, "10 cm", 585, 270, "#dbe3ef", 16); label(ctx, "30 cm", 765, 270, "#dbe3ef", 16);
+  } else if (primitive === "selected-force") {
+    const selectedX = preview.controlValue >= 30 ? 800 : 620;
+    dot(ctx, selectedX, 300, "#55e2db", 16);
+    forceArrow(ctx, selectedX, 300, selectedX, 415, "#55e2db", "相同推力");
   }
 }
 
@@ -821,6 +880,12 @@ function drawCandidateComparison(ctx, level, evidence, w, h) {
 
 function drawDormantApparatus(ctx, level, evidence, w, h) {
   const type = level.visual;
+  if (type === "lever-distance") {
+    ctx.fillStyle = "rgba(7,15,25,.55)";
+    ctx.fillRect(95, 115, w - 190, h - 175);
+    drawStoneDoorPlan(ctx);
+    return;
+  }
   ctx.fillStyle = "rgba(7,15,25,.55)";
   ctx.fillRect(95, 115, w - 190, h - 175);
   ctx.strokeStyle = "rgba(220,230,242,.72)";
@@ -858,6 +923,66 @@ function drawBasePlate(ctx, w, h, revealed) {
   ctx.fillStyle = revealed === "刻印與機關吻合" ? "#8fffd4" : revealed === "刻印與機關不合" ? "#ff9b91" : revealed === "機關調整中" ? "#ffdc8b" : "#d2d9e4";
   ctx.font = `800 ${canvasFontSize(revealed, 20, true)}px system-ui`;
   ctx.fillText(revealed, 46, 60);
+}
+
+function drawStoneDoor(ctx, hingeX, hingeY, angleDegrees, length, color) {
+  ctx.save();
+  ctx.translate(hingeX, hingeY);
+  ctx.rotate(angleDegrees * Math.PI / 180);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(255,228,172,.9)";
+  ctx.lineWidth = 4;
+  ctx.fillRect(0, -34, length, 68);
+  ctx.strokeRect(0, -34, length, 68);
+  ctx.restore();
+  dot(ctx, hingeX, hingeY, "#ffd86f", 13);
+}
+
+function drawStoneDoorPlan(ctx) {
+  ctx.fillStyle = "rgba(8,17,27,.82)";
+  ctx.fillRect(125, 130, 750, 330);
+  ctx.strokeStyle = "rgba(223,229,238,.34)";
+  ctx.lineWidth = 4;
+  ctx.setLineDash([10, 9]);
+  ctx.beginPath(); ctx.moveTo(500, 300); ctx.lineTo(850, 300); ctx.stroke();
+  ctx.setLineDash([]);
+  drawStoneDoor(ctx, 500, 300, 0, 350, "rgba(198,164,111,.78)");
+  dot(ctx, 617, 300, "#dbe3ef", 11); dot(ctx, 850, 300, "#dbe3ef", 11);
+  label(ctx, "10 cm", 575, 260, "#dbe3ef", 17); label(ctx, "30 cm", 805, 260, "#dbe3ef", 17);
+  label(ctx, "門軸", 450, 350, "#ffdc8b", 18);
+  label(ctx, "同一扇門 · 相同推力 · 相同方向 · 相同作用時間", 235, 430, "#dbe3ef", 17);
+}
+
+function drawPairedDoorEvidence(ctx, pair, revealed) {
+  if (!pair?.base || !pair?.target) throw new Error("G-F2: paired door evidence is incomplete");
+  const trials = [
+    { x: 265, title: `${pair.base.momentArm} cm 試推`, data: pair.base },
+    { x: 735, title: `${pair.target.momentArm} cm 試推`, data: pair.target }
+  ];
+  for (const trial of trials) {
+    ctx.fillStyle = "rgba(8,17,27,.78)";
+    ctx.fillRect(trial.x - 205, 105, 410, 355);
+    ctx.strokeStyle = "rgba(223,229,238,.3)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(trial.x - 205, 105, 410, 355);
+    label(ctx, trial.title, trial.x - 62, 145, "#ffdc8b", 18);
+    ctx.strokeStyle = "rgba(220,230,242,.52)";
+    ctx.lineWidth = 5;
+    ctx.setLineDash([9, 8]);
+    ctx.beginPath(); ctx.moveTo(trial.x - 120, 330); ctx.lineTo(trial.x + 135, 330); ctx.stroke();
+    ctx.setLineDash([]);
+    const projectedAngle = -Number(trial.data.responseAngle);
+    drawStoneDoor(ctx, trial.x - 120, 330, projectedAngle, 255, "rgba(198,164,111,.86)");
+    const theta = projectedAngle * Math.PI / 180;
+    const forceX = trial.x - 120 + Math.cos(theta) * 210;
+    const forceY = 330 + Math.sin(theta) * 210;
+    forceArrow(ctx, forceX, forceY, forceX + Math.sin(theta) * 78, forceY - Math.cos(theta) * 78, "#55e2db", "相同推力");
+    ctx.strokeStyle = "rgba(255,216,111,.7)";
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(trial.x - 120, 330, 88, projectedAngle * Math.PI / 180, 0); ctx.stroke();
+    label(ctx, "轉動痕跡", trial.x - 90, 430, "#dbe3ef", 16);
+  }
+  if (revealed) evidenceCaption(ctx, `${pair.base.momentArm} cm 與 ${pair.target.momentArm} cm 使用同一推力；較長力臂留下較大的轉動痕跡`);
 }
 
 // Vector convention used everywhere in the game:
@@ -908,13 +1033,7 @@ function drawTitanVisual(ctx, type, evidence, revealed, w, h) {
       evidenceCaption(ctx,"肘關節是前臂轉動中心，因此在槓桿模型中是支點");
     }
   } else if (type === "lever-distance") {
-    const px=250,py=355,tailX=px+Number(value)*12;
-    ctx.strokeStyle="rgba(255,255,255,.78)";ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(780,py);ctx.stroke();
-    dot(ctx,px,py,"#ffd86f",14);label(ctx,"支點",215,410,"#ffdc8b",18);
-    forceArrow(ctx,tailX,py,tailX,py+125,"#55e2db","相同施力 F");
-    ctx.strokeStyle="#ffd86f";ctx.lineWidth=4;ctx.setLineDash([9,7]);ctx.beginPath();ctx.moveTo(px,py+75);ctx.lineTo(tailX,py+75);ctx.stroke();ctx.setLineDash([]);
-    label(ctx,`作用距離 ${value} cm`,Math.min(tailX-55,610),py+112,"#ffdc8b",18);
-    if(revealed)evidenceCaption(ctx,"同一個力：施力點離支點越遠，力矩越大");
+    drawPairedDoorEvidence(ctx, evidence.pairedComparison, evidence.phase === "evaluation");
   } else if (type === "force-direction") {
     const px=250,py=355,tailX=610,theta=Number(value)*Math.PI/180,len=150;
     ctx.strokeStyle="rgba(255,255,255,.78)";ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(790,py);ctx.stroke();

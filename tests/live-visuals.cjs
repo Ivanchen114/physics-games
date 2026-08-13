@@ -54,6 +54,24 @@ for (const level of variableLevels) {
   );
 }
 
+const door = foundation.find(level => level.code === "G-F2");
+operations = [];
+sandbox.__drawVisual(door, { value: door.control.target, phase: "evidence" });
+const doorLabels = operations.filter(entry => entry[0] === "fillText").map(entry => String(entry[1])).join(" | ");
+assert.match(doorLabels, /10 cm 試推/);
+assert.match(doorLabels, /30 cm 試推/);
+assert.doesNotMatch(doorLabels, /力矩|較長力臂/, "G-F2 formal observation must not reveal the explanation before evaluation");
+const doorEvidence = physics.deriveEvidenceState(door, { value: door.control.target, phase: "evidence" });
+const domainDriven = structuredClone(doorEvidence);
+domainDriven.domainEvidence.observable.pairedComparison.base.responseAngle = 7;
+domainDriven.domainEvidence.observable.pairedComparison.target.responseAngle = 49;
+operations = [];
+sandbox.__drawVisual(door, { evidenceState: domainDriven });
+const mutatedSignature = JSON.stringify(operations);
+operations = [];
+sandbox.__drawVisual(door, { evidenceState: doorEvidence });
+assert.notEqual(mutatedSignature, JSON.stringify(operations), "G-F2 renderer must consume paired domain response angles rather than fixed decoration");
+
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
 for (const family of ["Momentum", "Energy", "Electric", "Magnetic", "Optics", "Thermal", "Celestial", "Newton", "Resonance", "EMWave", "Quantum", "Nuclear"]) {
   assert.match(app, new RegExp(`draw${family}Evidence\\(ctx, type, evidence`), `${family} renderer must consume the shared domain evidence instead of a parallel raw value`);

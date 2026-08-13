@@ -21,7 +21,8 @@ const canvasContext = new Proxy({}, {
     return true;
   }
 });
-const canvas = { width: 1000, height: 562, getContext: () => canvasContext };
+const canvasAttributes = {};
+const canvas = { width: 1000, height: 562, getContext: () => canvasContext, setAttribute: (name, value) => { canvasAttributes[name] = String(value); }, getAttribute: name => canvasAttributes[name] };
 const main = { querySelector: selector => selector === "[data-canvas]" ? canvas : null };
 const storageState = new Map([["law-temple-v5-evidence-ledger", JSON.stringify({
   "chrono.meet.entrySpeed": { value: 8, evidenceVersionId: "tab-a-v1", contractVersion: "chrono-meet-v2", status: "supported" },
@@ -38,7 +39,7 @@ sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 const source = fs.readFileSync(require.resolve("../app.js"), "utf8")
   .replace(/window\.addEventListener\("popstate", render\);\s*render\(\);\s*$/, "")
-  + "\n;globalThis.__drawVisual = drawVisual; globalThis.__dependencySnapshot = dependencySnapshot; globalThis.__dependencyContext = dependencyContext;";
+  + "\n;globalThis.__drawVisual = drawVisual; globalThis.__captureDependencies = captureDependencies; globalThis.__dependencySnapshot = dependencySnapshot; globalThis.__dependencyContext = dependencyContext; globalThis.__stageKnownItems = stageKnownItems;";
 vm.runInContext(source, sandbox, { filename: "app.js" });
 
 function texts(level, state) {
@@ -70,6 +71,18 @@ for (const level of auditedLevels) {
 }
 
 const byCode = Object.fromEntries(auditedLevels.map(level => [level.code, level]));
+for (const level of auditedLevels) {
+  const prePlan = physics.deriveEvidenceState(level, { phase: "pre-plan", value: level.control?.base });
+  const preview = physics.deriveEvidenceState(level, { phase: "preview", value: level.control?.base });
+  const prePlanAria = physics.accessibleProjection(level, prePlan);
+  const previewAria = physics.accessibleProjection(level, preview);
+  assert.ok(!prePlanAria.includes(level.assessedClaim), `${level.code}: pre-plan aria leaks assessedClaim`);
+  assert.ok(!previewAria.includes(level.assessedClaim), `${level.code}: preview aria leaks assessedClaim`);
+  assert.ok(!prePlanAria.includes(level.summary), `${level.code}: pre-plan aria leaks summary`);
+  assert.ok(!previewAria.includes(level.summary), `${level.code}: preview aria leaks summary`);
+  assert.ok(!(prePlan.domainEvidence.explanation || []).some(sentence => prePlanAria.includes(sentence)), `${level.code}: pre-plan aria leaks evaluation explanation`);
+  assert.ok(!(preview.domainEvidence.explanation || []).some(sentence => previewAria.includes(sentence)), `${level.code}: preview aria leaks evaluation explanation`);
+}
 const auditedFoundation = data.temples.flatMap(temple => temple.tracks.foundation);
 for (const level of auditedFoundation) {
   const previewEvidence = physics.deriveEvidenceState(level, { phase: "preview", value: level.control.target });
@@ -197,7 +210,27 @@ const cA3Evidence = physics.deriveEvidenceState(byCode["C-A3"], { phase: "eviden
 assert.equal(cA3Evidence.handoffEvidence["chrono.meet.entrySpeed"].value, cA3Evidence.chrono.second.v0, "Chrono handoff speed must come from the actual meet trace");
 assert.equal(cA3Evidence.handoffEvidence["chrono.meet.availableDistance"].value, cA3Evidence.chrono.meetingPosition, "Chrono handoff distance must come from the actual meet trace");
 
-const lockedTabASnapshot = sandbox.__dependencySnapshot(byCode["C-A4"]);
+const doorEvidence = physics.deriveEvidenceState(byCode["G-F2"], { phase: "evidence", value: 30 });
+const doorPair = doorEvidence.domainEvidence.observable.pairedComparison;
+assert.deepEqual(doorPair.comparesWith, [10, 30], "G-F2 paired run must formally compare the two story conditions");
+assert.equal(doorPair.base.forceMagnitude, doorPair.target.forceMagnitude, "G-F2 paired run must keep force magnitude fixed");
+assert.equal(doorPair.base.forceDirection, doorPair.target.forceDirection, "G-F2 paired run must keep force direction fixed");
+assert.equal(doorPair.base.actionDuration, doorPair.target.actionDuration, "G-F2 paired run must keep action duration fixed");
+assert.ok(doorPair.target.torqueFactor > doorPair.base.torqueFactor, "G-F2 longer moment arm must increase torque factor");
+assert.ok(doorPair.target.responseAngle > doorPair.base.responseAngle, "G-F2 rendered response must be driven by torque factor");
+assert.notEqual(doorPair.base.conditionSignature, doorPair.target.conditionSignature, "G-F2 paired observations need distinct condition signatures");
+assert.match(physics.accessibleProjection(byCode["G-F2"], doorEvidence), /10 cm.*較小.*30 cm.*較大/, "G-F2 formal aria must describe both observations");
+const doorEvaluation = structuredClone(doorEvidence);
+doorEvaluation.phase = "evaluation";
+doorEvaluation.domainEvidence.phase = "evaluation";
+assert.match(physics.accessibleProjection(byCode["G-F2"], doorEvaluation), /力矩/, "G-F2 may reveal force-moment language only at evaluation");
+
+const tabACapture = sandbox.__captureDependencies(byCode["C-A4"]);
+const lockedTabASnapshot = tabACapture.dependencyVersionSnapshot;
+assert.match(sandbox.__stageKnownItems(byCode["C-A4"], tabACapture).join(" "), /tab-a-v1/, "C-A4 locked display and version snapshot must come from the same capture");
+const tabAContext = sandbox.__dependencyContext(byCode["C-A4"], lockedTabASnapshot);
+const tabABrake = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 8 }, ...tabAContext });
+assert.equal(tabABrake.dependencyResolution.status, "supported", "unchanged C-A4 dependency capture must remain supported");
 storageState.set("law-temple-v5-evidence-ledger", JSON.stringify({
   "chrono.meet.entrySpeed": { value: 8, evidenceVersionId: "tab-b-v2", contractVersion: "chrono-meet-v2", status: "supported" },
   "chrono.meet.availableDistance": { value: 80, evidenceVersionId: "tab-b-v2", contractVersion: "chrono-meet-v2", status: "supported" }
@@ -207,6 +240,19 @@ assert.equal(crossTabContext.upstreamEvidence["chrono.meet.entrySpeed"].evidence
 const crossTabBrake = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 8 }, ...crossTabContext });
 assert.equal(crossTabBrake.dependencyResolution.status, "upstream_inconclusive", "a newer C-A3 version from another tab must invalidate the already-open C-A4");
 assert.equal(crossTabBrake.chrono, null, "stale C-A4 must not silently calculate with the old locked version");
+const tabBCapture = sandbox.__captureDependencies(byCode["C-A4"]);
+assert.match(sandbox.__stageKnownItems(byCode["C-A4"], tabBCapture).join(" "), /tab-b-v2/, "re-entering C-A4 without reload must display the fresh upstream version");
+const tabBContext = sandbox.__dependencyContext(byCode["C-A4"], tabBCapture.dependencyVersionSnapshot);
+const tabBBrake = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 8 }, ...tabBContext });
+assert.equal(tabBBrake.dependencyResolution.status, "supported", "fresh C-A4 capture must recover after re-entry without reload");
+assert.equal(tabBBrake.chrono.initialSpeed, 8, "recovered C-A4 must use the v2 upstream value");
+storageState.set("law-temple-v5-evidence-ledger", JSON.stringify({
+  "chrono.meet.entrySpeed": { value: 9, evidenceVersionId: "tab-c-v3", contractVersion: "chrono-meet-v2", status: "supported" },
+  "chrono.meet.availableDistance": { value: 90, evidenceVersionId: "tab-c-v3", contractVersion: "chrono-meet-v2", status: "supported" }
+}));
+const tabCContext = sandbox.__dependencyContext(byCode["C-A4"], tabBCapture.dependencyVersionSnapshot);
+const tabCBrake = physics.deriveEvidenceState(byCode["C-A4"], { phase: "evidence", values: { distance: 8 }, ...tabCContext });
+assert.equal(tabCBrake.dependencyResolution.status, "upstream_inconclusive", "a second external mutation must invalidate the newly locked C-A4 session again");
 
 const app = fs.readFileSync(require.resolve("../app.js"), "utf8");
 assert.match(app, /physics\.interferenceAt\(px,py,wave\.params\)/, "wave renderer must consume the domain model, not fixed decoration");
@@ -217,5 +263,6 @@ assert.doesNotMatch(app, /function drawPreviewApparatus[\s\S]*?observed:\s*true[
 assert.doesNotMatch(app, /ctx\.fillText\s*=\s*\(\)\s*=>\s*\{\}/, "preview disclosure cannot be implemented by erasing labels after drawing answer geometry");
 assert.match(app, /dependencyVersionSnapshot/, "the runtime path must carry the locked dependency version snapshot");
 assert.match(app, /上游資料已過期/, "cross-tab version invalidation must tell the player that the upstream trace changed");
+assert.match(app, /phase\s*=\s*"evaluation"/, "completeLevel must trigger the fourth disclosure phase");
 
 console.log(`Disclosure contracts: all ${auditedLevels.length} levels reviewed claim-by-claim, including ${auditedFoundation.length} preview layers; water, magnetic, optics and Chrono causal mutations guarded`);

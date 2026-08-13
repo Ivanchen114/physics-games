@@ -92,8 +92,8 @@ document.querySelector("[data-campaign]").innerHTML = `
   </div>
   <ol class="game-loop" aria-label="每關三步循環">
     <li><span>01</span><div><strong>先押下判斷</strong><small>在結果出現前，先留下自己的選擇。</small></div></li>
-    <li><span>02</span><div><strong>操作取證</strong><small>改變變因，讓圖像與數值留下證據。</small></div></li>
-    <li><span>03</span><div><strong>解釋修正</strong><small>用證據選模型；答錯也能回溯再試。</small></div></li>
+    <li><span>02</span><div><strong>喚醒機關</strong><small>改變一個條件，觀察世界留下的痕跡與證據。</small></div></li>
+    <li><span>03</span><div><strong>向守護者說明</strong><small>用剛才的證據說明原因；答錯也能回溯再試。</small></div></li>
   </ol>
   <div class="act-map" aria-label="法則遠征地圖">${actCards}</div>`;
 

@@ -443,7 +443,8 @@
 
   const previewPrimitiveCatalog = Object.freeze([
     "apparatus-silhouette", "control-dial", "optical-boundary", "surface-normal", "incident-ray",
-    "launch-platform", "time-dial", "central-body", "radius-dial"
+    "launch-platform", "time-dial", "central-body", "radius-dial",
+    "stone-door", "door-hinge", "door-candidates", "selected-force"
   ]);
 
   function derivePreviewGeometry(level, evidence) {
@@ -487,6 +488,25 @@
       observable.momentArm = value;
       observable.torqueFactor = level.visual === "force-direction" ? Math.sin(deg(value)) : value / Math.max(1, base);
       observable.muscleLoadRatio = level.visual === "posture" ? value / 5 : null;
+      if (level.code === "G-F2") {
+        const target = Number(level.control.target);
+        const trial = momentArm => ({
+          momentArm,
+          torqueFactor: momentArm / Math.max(1, base),
+          forceMagnitude: 1,
+          forceDirection: "perpendicular-to-door",
+          actionDuration: 1,
+          initialDoorAngle: 0,
+          responseAngle: 12 * momentArm / Math.max(1, base),
+          conditionSignature: `${level.code}:arm-${momentArm}:force-1:direction-perpendicular:duration-1`
+        });
+        observable.pairedComparison = {
+          sharedConditions: { sameDoor: true, forceMagnitude: 1, forceDirection: "perpendicular-to-door", actionDuration: 1, initialDoorAngle: 0 },
+          base: trial(base),
+          target: trial(target),
+          comparesWith: [base, target]
+        };
+      }
     } else if (family === "photo") {
       observable.photonEnergy = value;
       observable.thresholdCrossed = value > base;
@@ -596,6 +616,10 @@
   }
 
   function domainObservation(family, observable, evidence) {
+    if (family === "titans" && observable.pairedComparison) {
+      const pair = observable.pairedComparison;
+      return `同一扇門在相同推力、方向與作用時間下，${pair.base.momentArm} cm 留下較小轉動痕跡，${pair.target.momentArm} cm 留下較大轉動痕跡`;
+    }
     if (family === "titans") return `力臂 ${Number(observable.momentArm).toFixed(2)}，力矩因子 ${Number(observable.torqueFactor).toFixed(3)}`;
     if (family === "photo") return `光子能量刻度 ${Number(observable.photonEnergy).toFixed(2)}，門檻${observable.thresholdCrossed ? "已跨越" : "未跨越"}`;
     if (family === "ripple") return `波長 ${Number(observable.wavelength).toFixed(3)}，中央強度 ${Number(observable.centerIntensity).toFixed(3)}`;
@@ -630,6 +654,27 @@
     if (conclusion) material.push(`機關判讀：${outputLabel(level, "prediction", conclusion.prediction)}；依據：${outputLabel(level, "reason", conclusion.reason)}。`);
     if (solution?.outputs?.length) material.push(`同一模型輸出：${solution.outputs.map(field => `${field.id}=${Number(field.answer).toPrecision(6)}`).join("；")}。`);
     return material;
+  }
+
+  function accessibleProjection(level, evidence) {
+    const phase = evidence.phase || "pre-plan";
+    const domain = evidence.domainEvidence;
+    if (phase === "pre-plan") {
+      const known = level.observableSchema?.knownInputs || level.prePlanKnown || level.known || [];
+      const controls = level.observableSchema?.manipulableInputs || [];
+      const story = String(level.storyProblem || level.mission || "").replace(/[。！？]+$/u, "");
+      return `${level.title}。${story}。進入前能確認：${known.join("、")}。可操作：${controls.join("、")}。`;
+    }
+    if (phase === "preview") {
+      const observable = domain.observable;
+      const setting = `${level.control?.label || "目前設定"} ${observable.controlValue}${level.control?.unit ? ` ${level.control.unit}` : ""}`;
+      const paired = observable.pairedComparison ? "；同一扇門的兩個候選施力點與等長推力箭頭已標出" : "";
+      return `${level.title}的機關調整中。${setting}${paired}；尚未正式運轉，轉動結果尚未出現。`;
+    }
+    const observation = domainObservation(domain.family, domain.observable, evidence);
+    if (phase === "evidence") return `${level.title}的本次機關痕跡。${observation}。`;
+    if (phase === "evaluation") return `${level.title}的法則授證。${observation}。${domain.explanation.join(" ")}`;
+    throw new Error(`${level.code}: unsupported disclosure phase ${phase}`);
   }
 
   function deriveCausalMutationCase(level, evidence) {
@@ -673,9 +718,9 @@
     const values = Object.fromEntries(Object.entries(condition.values || {}).map(([key, raw]) => [key, Number(raw)]));
     const evidence = {
       phase,
-      observed: phase === "evidence",
+      observed: phase === "evidence" || phase === "evaluation",
       previewActive: phase === "preview",
-      certified: phase === "evidence" && condition.valuesOK !== false,
+      certified: (phase === "evidence" || phase === "evaluation") && condition.valuesOK !== false,
       value: Number(condition.value ?? level.control?.base ?? 0),
       values,
       modelOK: condition.modelOK,
@@ -806,5 +851,6 @@
     deriveAdvancedModel,
     solveAdvanced,
     describeEvidence
+    ,accessibleProjection
   };
 });
