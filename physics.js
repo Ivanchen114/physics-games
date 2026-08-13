@@ -539,6 +539,7 @@
       observable.refraction = evidence.optics.refraction;
       observable.critical = evidence.optics.critical;
       observable.imageDistance = evidence.optics.imageDistance;
+      observable.magnification = evidence.optics.magnification;
     } else if (family === "thermal") {
       observable.temperatureFactor = value / Math.max(1, base);
       observable.pressureFactor = level.visual.includes("gas") ? value / 300 : null;
@@ -615,45 +616,97 @@
     return options?.find(option => option.value === value)?.label || value;
   }
 
+  function fixedObservation(value, digits, field) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) throw new Error(`${field}: observable is not finite`);
+    return number.toFixed(digits);
+  }
+
+  function exponentialObservation(value, digits, field) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) throw new Error(`${field}: observable is not finite`);
+    return number.toExponential(digits);
+  }
+
   function domainObservation(family, observable, evidence) {
     if (family === "titans" && observable.pairedComparison) {
       const pair = observable.pairedComparison;
       return `同一扇門在相同推力、方向與作用時間下，${pair.base.momentArm} cm 留下較小轉動痕跡，${pair.target.momentArm} cm 留下較大轉動痕跡`;
     }
-    if (family === "titans") return `力臂 ${Number(observable.momentArm).toFixed(2)}，力矩因子 ${Number(observable.torqueFactor).toFixed(3)}`;
-    if (family === "photo") return `光子能量刻度 ${Number(observable.photonEnergy).toFixed(2)}，門檻${observable.thresholdCrossed ? "已跨越" : "未跨越"}`;
-    if (family === "ripple") return `波長 ${Number(observable.wavelength).toFixed(3)}，中央強度 ${Number(observable.centerIntensity).toFixed(3)}`;
-    if (family === "uncertainty") return `儀器控制值 ${Number(observable.controlValue).toFixed(3)}，讀值與解析度由同一狀態保留`;
-    if (family === "momentum") return `衝量因子 ${Number(observable.impulseFactor).toFixed(3)}，平均力因子 ${Number(observable.forceFactor).toFixed(3)}`;
-    if (family === "energy") return `功因子 ${Number(observable.workFactor).toFixed(3)}，能量因子 ${Number(observable.energyFactor).toFixed(3)}`;
+    if (family === "titans") return `力臂 ${fixedObservation(observable.momentArm, 2, "titans.momentArm")}，力矩因子 ${fixedObservation(observable.torqueFactor, 3, "titans.torqueFactor")}`;
+    if (family === "photo") return `光子能量刻度 ${fixedObservation(observable.photonEnergy, 2, "photo.photonEnergy")}，門檻${observable.thresholdCrossed ? "已跨越" : "未跨越"}`;
+    if (family === "ripple") return `波長 ${fixedObservation(observable.wavelength, 3, "ripple.wavelength")}，中央強度 ${fixedObservation(observable.centerIntensity, 3, "ripple.centerIntensity")}`;
+    if (family === "uncertainty") return `儀器控制值 ${fixedObservation(observable.controlValue, 3, "uncertainty.controlValue")}，讀值與解析度由同一狀態保留`;
+    if (family === "momentum") return `衝量因子 ${fixedObservation(observable.impulseFactor, 3, "momentum.impulseFactor")}，平均力因子 ${fixedObservation(observable.forceFactor, 3, "momentum.forceFactor")}`;
+    if (family === "energy") return `功因子 ${fixedObservation(observable.workFactor, 3, "energy.workFactor")}，能量因子 ${fixedObservation(observable.energyFactor, 3, "energy.energyFactor")}`;
     if (family === "electric") return `電荷符號 ${observable.chargeSign > 0 ? "+" : "−"}，支路數 ${observable.branchCount}`;
-    if (family === "magnetic") return `磁力 ${Number(observable.force).toExponential(3)}，軌跡半徑 ${Number(observable.trajectory.radius).toFixed(3)}`;
+    if (family === "magnetic") return `磁力 ${exponentialObservation(observable.force, 3, "magnetic.force")}，軌跡半徑 ${fixedObservation(observable.trajectory.radius, 3, "magnetic.radius")}`;
     if (family === "optics") {
-      if (observable.visual.includes("reflection")) return `入射角 ${Number(observable.incidence).toFixed(2)}°，反射角 ${Number(observable.reflection).toFixed(2)}°`;
-      if (observable.visual.includes("tir") || observable.visual.includes("critical")) return `入射角 ${Number(observable.incidence).toFixed(2)}°，臨界角 ${Number(observable.critical).toFixed(2)}°，${observable.refraction === null ? "沒有折射光" : "仍有折射光"}`;
-      if (observable.visual.includes("lens") || observable.visual.includes("magnify")) return `薄透鏡模型像距 ${Number(observable.imageDistance).toFixed(2)} cm，放大率 ${Number(observable.magnification).toFixed(3)}`;
-      return `入射角 ${Number(observable.incidence).toFixed(2)}°，折射角 ${observable.refraction === null ? "無" : `${Number(observable.refraction).toFixed(2)}°`}`;
+      if (observable.visual.includes("reflection")) return `入射角 ${fixedObservation(observable.incidence, 2, "optics.incidence")}°，反射角 ${fixedObservation(observable.reflection, 2, "optics.reflection")}°`;
+      if (observable.visual.includes("tir") || observable.visual.includes("critical")) return `入射角 ${fixedObservation(observable.incidence, 2, "optics.incidence")}°，臨界角 ${fixedObservation(observable.critical, 2, "optics.critical")}°，${observable.refraction === null ? "沒有折射光" : "仍有折射光"}`;
+      if (observable.visual.includes("lens") || observable.visual.includes("magnify")) return `薄透鏡模型像距 ${fixedObservation(observable.imageDistance, 2, "optics.imageDistance")} cm，放大率 ${fixedObservation(observable.magnification, 3, "optics.magnification")}`;
+      return `入射角 ${fixedObservation(observable.incidence, 2, "optics.incidence")}°，折射角 ${observable.refraction === null ? "無" : `${fixedObservation(observable.refraction, 2, "optics.refraction")}°`}`;
     }
-    if (family === "thermal") return `溫度因子 ${Number(observable.temperatureFactor).toFixed(3)}${observable.pressureFactor === null ? "" : `，壓力因子 ${Number(observable.pressureFactor).toFixed(3)}`}`;
-    if (family === "celestial") return `半徑因子 ${Number(observable.radiusFactor).toFixed(3)}，軌道速率因子 ${Number(observable.orbitalSpeedFactor).toFixed(3)}`;
-    if (family === "newton") return `合力狀態 ${Number(observable.netForce).toFixed(3)}${observable.horizontalVelocity === null ? "" : `，水平速度因子 ${observable.horizontalVelocity}`}`;
-    if (family === "resonance") return `頻率因子 ${Number(observable.frequencyFactor).toFixed(3)}${observable.relativeAmplitude === null ? "" : `，相對振幅 ${Number(observable.relativeAmplitude).toFixed(3)}`}`;
-    if (family === "emwave") return `變化率因子 ${Number(observable.changeRate).toFixed(3)}${observable.polarizedIntensity === null ? "" : `，透射強度比 ${Number(observable.polarizedIntensity).toFixed(3)}`}`;
-    if (family === "quantum") return `量子控制值 ${Number(observable.controlValue).toFixed(3)}，離散與帶電粒子狀態由此運算`;
-    if (family === "nuclear") return `核狀態控制值 ${Number(observable.controlValue).toFixed(3)}${observable.remainingFraction === null ? "" : `，剩餘比例 ${Number(observable.remainingFraction).toFixed(3)}`}`;
+    if (family === "thermal") return observable.temperatureDifference === null ? `溫度因子 ${fixedObservation(observable.temperatureFactor, 3, "thermal.temperatureFactor")}${observable.pressureFactor === null ? "" : `，壓力因子 ${fixedObservation(observable.pressureFactor, 3, "thermal.pressureFactor")}`}` : `兩物體溫差降至 ${fixedObservation(observable.temperatureDifference, 2, "thermal.temperatureDifference")}°C`;
+    if (family === "celestial") return `半徑因子 ${fixedObservation(observable.radiusFactor, 3, "celestial.radiusFactor")}，軌道速率因子 ${fixedObservation(observable.orbitalSpeedFactor, 3, "celestial.orbitalSpeedFactor")}`;
+    if (family === "newton") return `合力狀態 ${fixedObservation(observable.netForce, 3, "newton.netForce")}${observable.horizontalVelocity === null ? "" : `，水平速度因子 ${fixedObservation(observable.horizontalVelocity, 3, "newton.horizontalVelocity")}`}`;
+    if (family === "resonance") return `頻率因子 ${fixedObservation(observable.frequencyFactor, 3, "resonance.frequencyFactor")}${observable.relativeAmplitude === null ? "" : `，相對振幅 ${fixedObservation(observable.relativeAmplitude, 3, "resonance.relativeAmplitude")}`}`;
+    if (family === "emwave") return `變化率因子 ${fixedObservation(observable.changeRate, 3, "emwave.changeRate")}${observable.polarizedIntensity === null ? "" : `，透射強度比 ${fixedObservation(observable.polarizedIntensity, 3, "emwave.polarizedIntensity")}`}`;
+    if (family === "quantum") return `量子控制值 ${fixedObservation(observable.controlValue, 3, "quantum.controlValue")}，離散與帶電粒子狀態由此運算`;
+    if (family === "nuclear") return `核狀態控制值 ${fixedObservation(observable.controlValue, 3, "nuclear.controlValue")}${observable.remainingFraction === null ? "" : `，剩餘比例 ${fixedObservation(observable.remainingFraction, 3, "nuclear.remainingFraction")}`}`;
     if (family === "chrono") {
       if (evidence.dependencyResolution.status === "upstream_inconclusive") return "上游軌跡不足或版本已失效，暫不形成煞車結論";
-      if (evidence.chrono?.contractId === "chrono.brake") return `入站速度 ${evidence.chrono.initialSpeed} m/s，可用距離 ${evidence.chrono.gatePosition} m，停止位置 ${Number(evidence.chrono.stopPosition).toFixed(3)} m`;
-      return evidence.chrono?.meetingTime === null ? "時限內未會合" : `會合時間 ${Number(evidence.chrono.meetingTime).toFixed(3)} s，位置 ${Number(evidence.chrono.meetingPosition).toFixed(3)} m`;
+      if (evidence.chrono?.contractId === "chrono.brake") return `入站速度 ${evidence.chrono.initialSpeed} m/s，可用距離 ${evidence.chrono.gatePosition} m，停止位置 ${fixedObservation(evidence.chrono.stopPosition, 3, "chrono.stopPosition")} m`;
+      return evidence.chrono?.meetingTime === null ? "時限內未會合" : `會合時間 ${fixedObservation(evidence.chrono.meetingTime, 3, "chrono.meetingTime")} s，位置 ${fixedObservation(evidence.chrono.meetingPosition, 3, "chrono.meetingPosition")} m`;
     }
-    return `控制值 ${Number(observable.controlValue).toFixed(3)}`;
+    return `控制值 ${fixedObservation(observable.controlValue, 3, `${family}.controlValue`)}`;
   }
 
+  // Formal epistemic terms appear only after the player has acted: the temple
+  // names an action as a variable, a recorded response as evidence, and the
+  // chosen relationship as a physical model. They are not pre-task labels.
   function deriveDomainExplanation(level, family, observable, evidence, conclusion, solution) {
-    const material = [level.stateContract.explanation, `本次領域狀態：${domainObservation(family, observable, evidence)}。`];
-    if (conclusion) material.push(`機關判讀：${outputLabel(level, "prediction", conclusion.prediction)}；依據：${outputLabel(level, "reason", conclusion.reason)}。`);
-    if (solution?.outputs?.length) material.push(`同一模型輸出：${solution.outputs.map(field => `${field.id}=${Number(field.answer).toPrecision(6)}`).join("；")}。`);
-    return material;
+    const observation = domainObservation(family, observable, evidence);
+    if (evidence.phase !== "evaluation") return [`本次機關觀察：${observation}。`];
+    if (conclusion) {
+      const unit = level.control?.unit ? ` ${level.control.unit}` : "";
+      const base = observable.controlBase;
+      const target = observable.controlValue;
+      return [
+        `你這一輪只動了${level.control.label}（${base}${unit} → ${target}${unit}）—— 在法則的語言裡，那就是變因。`,
+        `機關留下的痕跡就是證據：當${level.control.label}由 ${base}${unit} 變為 ${target}${unit}，${observation}。`,
+        `讀懂這道痕跡靠的是「${level.skill}」這個物理模型 —— ${level.stateContract.explanation}`,
+        `所以本次判讀是「${outputLabel(level, "prediction", conclusion.prediction)}」，依據是「${outputLabel(level, "reason", conclusion.reason)}」。`
+      ];
+    }
+    if (solution) {
+      const modelLabel = level.models?.find(option => option.value === solution.model)?.label || solution.model;
+      const inputLabels = (level.inputs || []).map(field => field.label).join("與");
+      const outputEvidence = (solution.outputs || []).map(field => {
+        const input = level.inputs?.find(item => item.id === field.id);
+        const label = input?.label || field.id;
+        const unit = input?.unit ? ` ${input.unit}` : "";
+        const value = formatModelOutput(field.answer, field.tolerance, `${level.code}.${field.id}`);
+        return `${label}＝${value}${unit}`;
+      }).join("；");
+      const status = solution.status === "upstream_inconclusive" ? "這次證據不足" : evidence.certified ? "這次的刻印與模型一致" : "這次的刻印不支持模型";
+      return [
+        `你選的物理模型是「${modelLabel}」。`,
+        `你據此刻入的是${inputLabels}。`,
+        `機關依你的模型與輸入留下的痕跡就是證據：${outputEvidence || "本次未取得可判讀的模型輸出"}。`,
+        `${status} —— ${level.stateContract.explanation}`
+      ];
+    }
+    throw new Error(`${level.code}: evaluation explanation has no conclusion or solution`);
+  }
+
+  function formatModelOutput(value, tolerance = 0, field = "model.output") {
+    const number = Number(value);
+    const margin = Math.abs(Number(tolerance));
+    if (!Number.isFinite(number)) throw new Error(`${field}: model output is not finite`);
+    if (!Number.isFinite(margin) || margin <= 0) return String(Number(number.toPrecision(12)));
+    const decimals = Math.max(0, Math.min(6, Math.ceil(-Math.log10(margin))));
+    return number.toFixed(decimals);
   }
 
   function accessibleProjection(level, evidence) {
@@ -673,7 +726,7 @@
     }
     const observation = domainObservation(domain.family, domain.observable, evidence);
     if (phase === "evidence") return `${level.title}的本次機關痕跡。${observation}。`;
-    if (phase === "evaluation") return `${level.title}的法則授證。${observation}。${domain.explanation.join(" ")}`;
+    if (phase === "evaluation") return `${level.title}的法則授證。${domain.explanation.join(" ")}`;
     throw new Error(`${level.code}: unsupported disclosure phase ${phase}`);
   }
 

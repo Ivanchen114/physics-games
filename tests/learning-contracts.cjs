@@ -67,6 +67,8 @@ const finalQuestions = {
 for (const [code, question] of Object.entries(finalQuestions)) assert.equal(byCode[code].prediction.question, question, `${code}: finalized story-question bridge drifted`);
 assert.equal(byCode["G-F2"].prediction.question, "假設你用一樣大小的力氣去推，把手放在遠離門軸的邊緣 (30 cm)，比起靠近門軸處 (10 cm)，石門的轉動情形會...？", "G-F2 finalized text must remain unchanged");
 assert.equal(byCode["G-F2"].control.step, 20, "G-F2 must expose only the two story conditions");
+assert.equal(byCode["B-F1"].storyProblem, "距離固定，只能翻轉右側磁柱；先判斷兩根磁柱之間會怎樣，神門的開合由這個作用決定。", "B-F1 story problem must ask about the same subject as its three answer options");
+assert.doesNotMatch(byCode["B-F1"].storyProblem, /互相排斥|互相吸引|沒有作用/, "B-F1 story problem must not eliminate or reveal an answer option");
 assert.doesNotMatch([byCode["H-F2"].mission, byCode["H-F2"].storyTeaser, byCode["H-F2"].storyProblem].join(" "), /熱能/, "H-F2 story layers must consistently use 熱量");
 assert.equal(data.tracks.foundation.task, "觀念、讀圖與現象判斷");
 assert.match(data.world.finale, /模型解釋現象.*證據不支持原先的判斷.*修正自己的解釋/);

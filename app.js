@@ -653,7 +653,8 @@ function updateAttempts(label, count) {
 }
 
 function completeLevel(level, index, feedback) {
-  storeHandoffEvidence(episodeTrace.evidenceRun?.observable);
+  const recordedEvidence = episodeTrace.evidenceRun?.observable;
+  storeHandoffEvidence(recordedEvidence);
   const firstClear = !completed.has(level.code);
   completed.add(level.code);
   saveProgress();
@@ -672,16 +673,28 @@ function completeLevel(level, index, feedback) {
   const trackEnding = index + 1 === levels.length ? `<br><strong>${route.label}完成：${track === "foundation" ? "觀測印" : "演算印"}已與 ${temple.relic} 共鳴。</strong>` : "";
   const rewardText = firstClear ? `<br><span class="reward-note">+${reward} 法則經驗・目前階級：${playerRank()}</span>` : `<br><span class="reward-note">重試完成，不重複計算經驗。</span>`;
   feedback.className = "feedback ok";
-  const explanation = physics.describeEvidence(level, episodeTrace.evidenceRun.observable);
-  const evaluationEvidence = structuredCloneSafe(episodeTrace.evidenceRun.observable);
-  evaluationEvidence.phase = "evaluation";
-  evaluationEvidence.observed = true;
-  evaluationEvidence.certified = true;
-  evaluationEvidence.domainEvidence.phase = "evaluation";
-  evaluationEvidence.domainEvidence.observed = true;
-  evaluationEvidence.domainEvidence.certified = true;
+  const evaluationCondition = track === "foundation"
+    ? { phase: "evaluation", value: recordedEvidence.value, valuesOK: true }
+    : {
+        phase: "evaluation",
+        values: recordedEvidence.values,
+        modelOK: recordedEvidence.modelOK,
+        valuesOK: recordedEvidence.valuesOK,
+        upstreamEvidence: recordedEvidence.dependencyResolution?.entries?.reduce((sources, entry) => {
+          if (entry.provenance === "upstream_evidence") sources[entry.valueRef] = {
+            value: entry.value,
+            evidenceVersionId: entry.evidenceVersionId,
+            contractVersion: entry.contractVersion,
+            status: entry.status
+          };
+          return sources;
+        }, {}),
+        dependencyVersionSnapshot: stageDependencyCapture?.dependencyVersionSnapshot
+      };
+  const evaluationEvidence = physics.deriveEvidenceState(level, evaluationCondition);
+  const explanation = physics.describeEvidence(level, evaluationEvidence);
   drawVisual(level, { evidenceState: evaluationEvidence });
-  feedback.innerHTML = `<strong>法則刻印已取得。</strong><br>${explanation}${rewardText}${trackEnding}<br><button type="button" class="primary-button next-button" data-next>${index + 1 < levels.length ? "前往下一關" : "返回關卡地圖"}</button>`;
+  feedback.innerHTML = `<strong>法則刻印已取得。</strong><br>${explanation}<br>${temple.relic}已回應你的刻印。${rewardText}${trackEnding}<br><button type="button" class="primary-button next-button" data-next>${index + 1 < levels.length ? "前往下一關" : "返回關卡地圖"}</button>`;
   sound("success");
   if (firstClear) spawnSealBurst();
   main.querySelector("[data-next]").addEventListener("click", () => index + 1 < levels.length ? setLocation(levels[index + 1].code) : setLocation(null));

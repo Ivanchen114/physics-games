@@ -72,6 +72,30 @@ for (const level of auditedLevels) {
 
 const byCode = Object.fromEntries(auditedLevels.map(level => [level.code, level]));
 for (const level of auditedLevels) {
+  const condition = level.inputs ? { values: {} } : { value: level.control.target };
+  const upstreamEvidence = level.code === "C-A4" ? {
+    "chrono.meet.entrySpeed": { value: 20, evidenceVersionId: "language:C-A3", contractVersion: "chrono-meet-v2", status: "supported" },
+    "chrono.meet.availableDistance": { value: 50, evidenceVersionId: "language:C-A3", contractVersion: "chrono-meet-v2", status: "supported" }
+  } : undefined;
+  const dependencyVersionSnapshot = level.code === "C-A4" ? {
+    "chrono.meet.entrySpeed": "language:C-A3",
+    "chrono.meet.availableDistance": "language:C-A3"
+  } : undefined;
+  const seed = physics.deriveEvidenceState(level, { ...condition, phase: "evidence", upstreamEvidence, dependencyVersionSnapshot });
+  const solvedValues = level.inputs ? Object.fromEntries(seed.domainEvidence.solution.outputs.map(field => [field.id, field.answer])) : undefined;
+  const evidence = physics.deriveEvidenceState(level, { ...condition, values: solvedValues, phase: "evidence", modelOK: true, valuesOK: true, upstreamEvidence, dependencyVersionSnapshot });
+  const evaluation = physics.deriveEvidenceState(level, { ...condition, values: solvedValues, phase: "evaluation", modelOK: true, valuesOK: true, upstreamEvidence, dependencyVersionSnapshot });
+  const evidenceText = physics.describeEvidence(level, evidence);
+  const evaluationText = physics.describeEvidence(level, evaluation);
+  const evaluationAria = physics.accessibleProjection(level, evaluation);
+  assert.doesNotMatch(`${evidenceText} ${physics.accessibleProjection(level, evidence)}`, /物理模型|那就是變因|痕跡就是證據/, `${level.code}: formal certification language must wait until evaluation`);
+  assert.match(evaluationText, /證據.*物理模型|物理模型.*證據/, `${level.code}: evaluation must name evidence and physical model`);
+  if (level.inputs) assert.doesNotMatch(evaluationText, /變因/, `${level.code}: advanced certification must not invent a variable operation`);
+  else assert.match(evaluationText, /變因/, `${level.code}: foundation certification must name the operated variable`);
+  assert.ok(evaluationAria.includes(evaluationText), `${level.code}: evaluation aria and visible certification must consume the same material`);
+  assert.doesNotMatch(`${evidenceText} ${evaluationText} ${evaluationAria}`, /NaN|undefined/, `${level.code}: certification must never expose a non-finite placeholder`);
+}
+for (const level of auditedLevels) {
   const prePlan = physics.deriveEvidenceState(level, { phase: "pre-plan", value: level.control?.base });
   const preview = physics.deriveEvidenceState(level, { phase: "preview", value: level.control?.base });
   const prePlanAria = physics.accessibleProjection(level, prePlan);
@@ -152,6 +176,12 @@ assert.equal(magneticWrongEntry.magnetic.studentRadius, 1.5, "magnetic evidence 
 const opticsWrongEntry = physics.deriveEvidenceState(byCode["O-A3"], { phase: "evidence", values: { distance: 12 } });
 assert.ok(Math.abs(opticsWrongEntry.optics.imageDistance - 15) < 1e-9, "optics physical ray intersection must come from f and do");
 assert.equal(opticsWrongEntry.optics.studentImageDistance, 12, "optics evidence must retain the player's claimed image distance separately");
+for (const code of ["O-F4", "O-A3", "O-A4"]) {
+  const level = byCode[code];
+  const evidence = physics.deriveEvidenceState(level, level.inputs ? { phase: "evidence", values: {} } : { phase: "evidence", value: level.control.target });
+  assert.ok(Number.isFinite(evidence.domainEvidence.observable.magnification), `${code}: optics family must copy magnification into the shared observable`);
+  assert.doesNotMatch(physics.describeEvidence(level, evidence), /NaN|undefined/, `${code}: optical evidence description must contain a finite magnification`);
+}
 const snellWrongEntry = physics.deriveEvidenceState(byCode["O-A1"], { phase: "evidence", values: { angle: 70 } });
 assert.ok(Math.abs(snellWrongEntry.optics.refraction - 19.4712) < 1e-3, "O-A1 physical refraction ray must stay on Snell's law when the player enters 70 degrees");
 assert.equal(snellWrongEntry.optics.studentAngle, 70, "O-A1 must retain the player's angle as a separate comparison marker");
@@ -220,9 +250,7 @@ assert.ok(doorPair.target.torqueFactor > doorPair.base.torqueFactor, "G-F2 longe
 assert.ok(doorPair.target.responseAngle > doorPair.base.responseAngle, "G-F2 rendered response must be driven by torque factor");
 assert.notEqual(doorPair.base.conditionSignature, doorPair.target.conditionSignature, "G-F2 paired observations need distinct condition signatures");
 assert.match(physics.accessibleProjection(byCode["G-F2"], doorEvidence), /10 cm.*較小.*30 cm.*較大/, "G-F2 formal aria must describe both observations");
-const doorEvaluation = structuredClone(doorEvidence);
-doorEvaluation.phase = "evaluation";
-doorEvaluation.domainEvidence.phase = "evaluation";
+const doorEvaluation = physics.deriveEvidenceState(byCode["G-F2"], { phase: "evaluation", value: 30, valuesOK: true });
 assert.match(physics.accessibleProjection(byCode["G-F2"], doorEvaluation), /力矩/, "G-F2 may reveal force-moment language only at evaluation");
 
 const tabACapture = sandbox.__captureDependencies(byCode["C-A4"]);
@@ -263,6 +291,6 @@ assert.doesNotMatch(app, /function drawPreviewApparatus[\s\S]*?observed:\s*true[
 assert.doesNotMatch(app, /ctx\.fillText\s*=\s*\(\)\s*=>\s*\{\}/, "preview disclosure cannot be implemented by erasing labels after drawing answer geometry");
 assert.match(app, /dependencyVersionSnapshot/, "the runtime path must carry the locked dependency version snapshot");
 assert.match(app, /上游資料已過期/, "cross-tab version invalidation must tell the player that the upstream trace changed");
-assert.match(app, /phase\s*=\s*"evaluation"/, "completeLevel must trigger the fourth disclosure phase");
+assert.match(app, /phase:\s*"evaluation"/, "completeLevel must trigger the fourth disclosure phase");
 
 console.log(`Disclosure contracts: all ${auditedLevels.length} levels reviewed claim-by-claim, including ${auditedFoundation.length} preview layers; water, magnetic, optics and Chrono causal mutations guarded`);
