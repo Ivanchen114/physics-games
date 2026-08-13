@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const data = require("../data.js");
 
 const codes = [];
@@ -69,6 +70,12 @@ assert.equal(byCode["G-F2"].control.step, 20, "G-F2 must expose only the two sto
 assert.doesNotMatch([byCode["H-F2"].mission, byCode["H-F2"].storyTeaser, byCode["H-F2"].storyProblem].join(" "), /熱能/, "H-F2 story layers must consistently use 熱量");
 assert.equal(data.tracks.foundation.task, "觀念、讀圖與現象判斷");
 assert.match(data.world.finale, /模型解釋現象.*證據不支持原先的判斷.*修正自己的解釋/);
+const homeSource = fs.readFileSync(require.resolve("../home.js"), "utf8");
+const indexSource = fs.readFileSync(require.resolve("../index.html"), "utf8");
+assert.doesNotMatch(homeSource, /觀念與質性判斷|觀念與趨勢判斷/, "home cards must use the finalized foundation task");
+assert.match(homeSource, /data\.tracks\.foundation\.task/, "home cards must project the canonical foundation task");
+assert.doesNotMatch(indexSource, /留下證據|觀念與質性判斷|觀念與趨勢判斷/, "static home fallback must follow the finalized action-layer wording");
+assert.match(indexSource, /留下刻痕.*觀念、讀圖與現象判斷/s, "static home fallback must include the finalized wording");
 for (const temple of data.temples) assert.ok(temple.history && temple.history.length > 35, `${temple.id}: science-history inscription missing`);
 for (const temple of data.temples) {
   for (const track of ["foundation", "advanced"]) {

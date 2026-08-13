@@ -109,7 +109,7 @@ document.querySelector("[data-temple-grid]").innerHTML = data.temples.map(temple
     <p class="guardian-line"><span>守護者</span>${temple.guardian}・<strong>${relicFound ? `${temple.relic} 已取得` : temple.relic}</strong></p>
     <div class="track-doors">
       <a class="track-door foundation" href="temple.html?temple=${temple.id}&track=foundation">
-        <strong>初階殿｜高一基礎概念</strong><small>${foundation} / ${temple.tracks.foundation.length}・觀念與質性判斷</small><span>→</span>
+        <strong>初階殿｜高一基礎概念</strong><small>${foundation} / ${temple.tracks.foundation.length}・${data.tracks.foundation.task}</small><span>→</span>
       </a>
       <a class="track-door advanced" href="temple.html?temple=${temple.id}&track=advanced">
         <strong>進階殿｜高二、高三</strong><small>${advanced} / ${temple.tracks.advanced.length}・加深加廣計算</small><span>→</span>
