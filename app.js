@@ -16,6 +16,9 @@ let mistakes = 0;
 let usedHint = false;
 let rewinds = 0;
 let episodeTrace = null;
+let canvasResizeObserver = null;
+let lastVisualRequest = null;
+let canvasTypography = { cssScale: 1 };
 
 document.body.dataset.track = track;
 document.documentElement.style.setProperty("--temple-color", temple.color);
@@ -190,6 +193,9 @@ function renderMap() {
 }
 
 function renderStage(level, index, session) {
+  canvasResizeObserver?.disconnect();
+  canvasResizeObserver = null;
+  lastVisualRequest = null;
   attempts = session?.attempts || 0;
   hintOpen = Boolean(session?.hintOpen);
   flame = session?.flame ?? 3;
@@ -215,10 +221,10 @@ function renderStage(level, index, session) {
         <section class="known"><h2>進入前能確認的事</h2><ul>${stageKnownItems(level).map(item => `<li>${item}</li>`).join("")}</ul></section>
         <section class="hint-box"><button type="button" data-hint>${hintOpen ? "收起線索" : "查看一層線索"}</button><p data-hint-text aria-live="polite">${hintOpen ? level.hint : ""}</p></section>
       </aside>
-      <div class="game-panel">
+      <section class="workbench" data-workbench aria-label="物理機關工作檯">
         <figure class="scene-frame"><img src="${level.image}" alt="${level.title}的神殿情境圖"><canvas class="evidence-canvas" width="1000" height="562" data-canvas aria-label="程式繪製的物理證據圖"></canvas><figcaption class="scene-caption">情境圖只提供故事；向量、圖線、刻度與數值由程式繪製。</figcaption></figure>
-        ${track === "foundation" ? foundationChallenge(level, index) : advancedChallenge(level, index)}
-      </div>
+        <div class="phase-dock" data-phase-dock>${track === "foundation" ? foundationChallenge(level, index) : advancedChallenge(level, index)}</div>
+      </section>
     </div>
   </section>`;
   main.querySelector("[data-back]").addEventListener("click", () => setLocation(null));
@@ -232,6 +238,7 @@ function renderStage(level, index, session) {
   if (track === "foundation") bindFoundation(level, index);
   else bindAdvanced(level, index);
   drawVisual(level, { value: level.control?.base, phase: "pre-plan" });
+  bindCanvasResize(level);
 }
 
 function stageKnownItems(level) {
@@ -282,38 +289,86 @@ function stageSession() {
 
 function foundationChallenge(level) {
   const evidenceStep = level.control.kind === "reveal"
-    ? `<div class="control-step" data-control-step>
-      <p class="step-label">喚醒石臂</p>
-      <p class="question">讓沉睡的石臂完成一次轉動。</p>
-      <input id="level-control" type="hidden" value="${level.control.target}" data-control>
-      <button type="button" class="primary-button" data-run>喚醒石臂</button>
-    </div>`
-    : `<div class="control-step" data-control-step>
-      <p class="step-label">親手試一次</p>
-      <div class="slider-head"><span class="control-label">${level.control.label}</span><output data-readout>${formatControlValue(level.control.base)} ${level.control.unit}</output></div>
-      ${controlMarkup(level.control)}
-      <div class="live-observation" data-live-observation aria-live="polite">
-        <span>機關回應</span><strong data-live-text></strong>
-        <i aria-hidden="true"><b data-live-meter></b></i>
-      </div>
-      <p class="target-note">把控制調到 <strong>${formatControlValue(level.control.target)} ${level.control.unit}</strong>，再讓機關運轉。</p>
-      <button type="button" class="primary-button" data-run>讓機關運轉</button>
-    </div>`;
+    ? phasePanel("control", "操作機關", `<p class="step-label">喚醒石臂</p>
+        <p class="question">讓沉睡的石臂完成一次轉動。</p>
+        <input id="level-control" type="hidden" value="${level.control.target}" data-control>
+        <button type="button" class="primary-button" data-run>喚醒石臂</button>`, "control-step", "data-control-step")
+    : phasePanel("control", "操作機關", `<p class="step-label">親手試一次</p>
+        <div class="slider-head"><span class="control-label">${level.control.label}</span><output data-readout>${formatControlValue(level.control.base)} ${level.control.unit}</output></div>
+        ${controlMarkup(level.control)}
+        <div class="live-observation" data-live-observation aria-live="polite">
+          <span>機關回應</span><strong data-live-text></strong>
+          <i aria-hidden="true"><b data-live-meter></b></i>
+        </div>
+        <p class="target-note">把控制調到 <strong>${formatControlValue(level.control.target)} ${level.control.unit}</strong>，再讓機關運轉。</p>
+        <button type="button" class="primary-button" data-run>讓機關運轉</button>`, "control-step", "data-control-step");
   return `<section class="challenge-card">
-    <div class="prediction-step">
+    ${phasePanel("prediction", "你的判斷", `<div class="prediction-step">
       <p class="step-label">先說你認為會發生什麼</p><p class="question">${level.prediction.question}</p>
       <div class="choices" data-predictions>${choiceButtons(level.prediction.options, "prediction")}</div>
       <div class="action-row"><span class="attempts" data-attempts>機關仍在等待</span><button type="button" class="primary-button" data-lock disabled>就押這個</button></div>
-    </div>
-    <hr class="phase-divider">
+    </div>`, "visible is-active")}
     ${evidenceStep}
-    <div class="reason-step" data-reason-step>
-      <hr class="phase-divider"><p class="step-label">把剛才看見的事說清楚</p><p class="question">${level.reason.question}</p>
+    ${phasePanel("reason", "你的解釋", `<p class="step-label">把剛才看見的事說清楚</p><p class="question">${level.reason.question}</p>
       <div class="choices" data-reasons>${choiceButtons(level.reason.options, "reason")}</div>
-      <button type="button" class="primary-button" data-submit-reason disabled>告訴守護者</button>
-    </div>
+      <button type="button" class="primary-button" data-submit-reason disabled>告訴守護者</button>`, "reason-step", "data-reason-step")}
     <div class="feedback" data-feedback aria-live="polite">先選一種可能；機關會等你決定後才運轉。</div>
   </section>`;
+}
+
+function phasePanel(name, labelText, body, classes = "", attributes = "") {
+  return `<section class="phase-panel ${classes}" data-phase-panel="${name}" ${attributes}>
+    <button type="button" class="phase-summary" data-phase-toggle="${name}" aria-expanded="false">
+      <span>${labelText}</span><strong data-phase-summary="${name}">尚未完成</strong><i aria-hidden="true">⌄</i>
+    </button>
+    <div class="phase-body">${body}</div>
+  </section>`;
+}
+
+function choiceLabel(selector, value) {
+  return main.querySelector(`${selector}[data-prediction="${value}"], ${selector}[data-model="${value}"]`)?.textContent?.trim() || value;
+}
+
+function setPhaseSummary(name, text) {
+  const summary = main.querySelector(`[data-phase-summary="${name}"]`);
+  if (summary) summary.textContent = text;
+}
+
+function activatePhase(name, { align = true } = {}) {
+  const dock = main.querySelector("[data-phase-dock]");
+  if (!dock) return;
+  dock.classList.remove("has-review");
+  dock.querySelectorAll("[data-phase-panel]").forEach(panel => {
+    const active = panel.dataset.phasePanel === name;
+    panel.classList.toggle("is-active", active);
+    panel.classList.remove("is-reviewing");
+    const toggle = panel.querySelector(":scope > [data-phase-toggle]");
+    toggle?.setAttribute("aria-expanded", "false");
+  });
+  if (align) alignWorkbench();
+}
+
+function bindPhaseDock() {
+  const dock = main.querySelector("[data-phase-dock]");
+  dock?.querySelectorAll("[data-phase-toggle]").forEach(toggle => toggle.addEventListener("click", () => {
+    const panel = toggle.closest("[data-phase-panel]");
+    const opening = !panel.classList.contains("is-reviewing");
+    dock.querySelectorAll("[data-phase-panel]").forEach(item => {
+      item.classList.remove("is-reviewing");
+      item.querySelector(":scope > [data-phase-toggle]")?.setAttribute("aria-expanded", "false");
+    });
+    dock.classList.toggle("has-review", opening);
+    panel.classList.toggle("is-reviewing", opening);
+    toggle.setAttribute("aria-expanded", String(opening));
+    if (opening) alignWorkbench();
+  }));
+}
+
+function alignWorkbench() {
+  const workbench = main.querySelector("[data-workbench]");
+  if (!workbench || !window.matchMedia("(max-width: 1199px)").matches) return;
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  requestAnimationFrame(() => workbench.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" }));
 }
 
 function controlMarkup(control) {
@@ -359,13 +414,12 @@ function liveObservation(level, value) {
 
 function advancedChallenge(level) {
   return `<section class="challenge-card">
-    <p class="step-label">從碑文中選一條法則</p><p class="question">哪一條關係能讓這道機關成立？</p>
-    <div class="choices model-choices" data-models>${choiceButtons(level.models, "model")}</div>
-    <div class="calculation-step" data-calculation-step>
-      <hr class="phase-divider"><p class="step-label">把你的數值刻入機關</p>
+    ${phasePanel("model", "選定法則", `<p class="step-label">從碑文中選一條法則</p><p class="question">哪一條關係能讓這道機關成立？</p>
+      <div class="choices model-choices" data-models>${choiceButtons(level.models, "model")}</div>`, "visible is-active")}
+    ${phasePanel("calculation", "數值刻印", `<p class="step-label">把你的數值刻入機關</p>
       <div class="number-grid">${level.inputs.map(field => `<label class="number-field">${field.label}<div><input data-answer="${field.id}" type="number" inputmode="decimal" step="any" aria-label="${field.label}"><span>${field.unit}</span></div></label>`).join("")}</div>
       <div class="action-row"><span class="attempts" data-attempts>刻印仍未回應</span><button type="button" class="primary-button" data-verify>啟動刻印</button></div>
-    </div>
+    `, "calculation-step", "data-calculation-step")}
     <div class="feedback" data-feedback aria-live="polite">先選一條法則，石碑才會接受你的數值。</div>
   </section>`;
 }
@@ -383,6 +437,7 @@ function bindFoundation(level, index) {
   const controlStep = main.querySelector("[data-control-step]");
   const reasonStep = main.querySelector("[data-reason-step]");
   const feedback = main.querySelector("[data-feedback]");
+  bindPhaseDock();
 
   main.querySelectorAll("[data-prediction]").forEach(button => button.addEventListener("click", () => {
     sound("select");
@@ -403,6 +458,8 @@ function bindFoundation(level, index) {
     };
     episodeTrace.status = "plan-locked";
     controlStep.classList.add("visible");
+    setPhaseSummary("prediction", `已刻下：${choiceLabel(".choice", selectedPrediction)}`);
+    activatePhase("control");
     if (level.control.kind !== "reveal") {
       updateLiveObservation(level, Number(controlInput.value));
       drawVisual(level, { value: Number(controlInput.value), phase: "preview" });
@@ -460,6 +517,8 @@ function bindFoundation(level, index) {
     sound("evidence");
     drawVisual(level, { value, phase: "evidence" });
     reasonStep.classList.add("visible");
+    setPhaseSummary("control", `本次條件：${formatControlValue(value)} ${level.control.unit} · 第 ${attempts} 次`);
+    activatePhase("reason");
     main.querySelector("[data-submit-reason]").disabled = !selectedReason;
     feedback.className = "feedback";
     const outcome = physics.evaluateFoundation(level, episodeTrace.evidenceRun.observable, selectedPrediction, null);
@@ -494,11 +553,14 @@ function bindAdvanced(level, index) {
   const lockedDependencySnapshot = dependencySnapshot(level);
   const feedback = main.querySelector("[data-feedback]");
   const calculation = main.querySelector("[data-calculation-step]");
+  bindPhaseDock();
   main.querySelectorAll("[data-model]").forEach(button => button.addEventListener("click", () => {
     sound("select");
     selectedModel = button.dataset.model;
     selectOne("[data-model]", button);
     calculation.classList.add("visible");
+    setPhaseSummary("model", `已選定：${button.textContent.trim()}`);
+    activatePhase("calculation");
     episodeTrace.comparisonPlan = { claim: level.assessedClaim, selectedModel, requiredOutputs: level.inputs.map(field => field.id) };
     episodeTrace.status = "plan-locked";
     if (evidenceValid) invalidateAdvanced(level, feedback);
@@ -606,7 +668,8 @@ function drawVisual(level, state) {
   const canvas = main.querySelector("[data-canvas]");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
-  const w = canvas.width, h = canvas.height;
+  lastVisualRequest = { level, state: structuredCloneSafe(state) };
+  const { w, h } = prepareEvidenceCanvas(canvas, ctx);
   ctx.clearRect(0, 0, w, h);
   ctx.save();
   ctx.lineCap = "round";
@@ -633,6 +696,54 @@ function drawVisual(level, state) {
   drawEvidenceApparatus(ctx, level, renderEvidence, revealed, w, h);
   if (observed && level.inputs) drawCandidateComparison(ctx, level, renderEvidence, w, h);
   ctx.restore();
+}
+
+function structuredCloneSafe(value) {
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
+function prepareEvidenceCanvas(canvas, ctx) {
+  const logicalWidth = 1000;
+  const logicalHeight = 562;
+  const rect = canvas.getBoundingClientRect?.();
+  const cssWidth = Number(rect?.width) || logicalWidth;
+  const cssHeight = Number(rect?.height) || cssWidth * logicalHeight / logicalWidth;
+  const dpr = Math.min(3, Math.max(1, Number(window.devicePixelRatio) || 1));
+  const pixelWidth = Math.max(1, Math.round(cssWidth * dpr));
+  const pixelHeight = Math.max(1, Math.round(cssHeight * dpr));
+  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+  ctx.setTransform?.(pixelWidth / logicalWidth, 0, 0, pixelHeight / logicalHeight, 0, 0);
+  canvasTypography = { cssScale: cssWidth / logicalWidth };
+  if (canvas.dataset) {
+    canvas.dataset.logicalSize = `${logicalWidth}x${logicalHeight}`;
+    canvas.dataset.backingSize = `${pixelWidth}x${pixelHeight}`;
+    canvas.dataset.minimumLabelPx = "12";
+    canvas.dataset.minimumKeyPx = "14";
+  }
+  return { w: logicalWidth, h: logicalHeight };
+}
+
+function bindCanvasResize(level) {
+  const frame = main.querySelector(".scene-frame");
+  if (!frame || typeof ResizeObserver !== "function") return;
+  let previousSize = "";
+  canvasResizeObserver = new ResizeObserver(entries => {
+    const rect = entries[0]?.contentRect;
+    const nextSize = `${Math.round(rect?.width || 0)}x${Math.round(rect?.height || 0)}@${window.devicePixelRatio || 1}`;
+    if (!lastVisualRequest || nextSize === previousSize) return;
+    previousSize = nextSize;
+    drawVisual(lastVisualRequest.level || level, lastVisualRequest.state);
+  });
+  canvasResizeObserver.observe(frame);
+}
+
+function canvasFontSize(text, requested, key = false) {
+  const scale = Math.max(.01, canvasTypography.cssScale || 1);
+  const isKey = key || requested >= 20 || /\d|°|[=×±ΔΦρλ]/.test(String(text));
+  const minimumCssPixels = isKey ? 14 : 12;
+  return Math.max(requested, minimumCssPixels / scale);
 }
 
 function renderStateFromDomain(domainResult) {
@@ -745,7 +856,7 @@ function drawBasePlate(ctx, w, h, revealed) {
   ctx.fillStyle = "rgba(5,10,17,.52)";
   ctx.fillRect(26, 28, 300, 50);
   ctx.fillStyle = revealed === "刻印與機關吻合" ? "#8fffd4" : revealed === "刻印與機關不合" ? "#ff9b91" : revealed === "機關調整中" ? "#ffdc8b" : "#d2d9e4";
-  ctx.font = "800 20px system-ui";
+  ctx.font = `800 ${canvasFontSize(revealed, 20, true)}px system-ui`;
   ctx.fillText(revealed, 46, 60);
 }
 
@@ -759,11 +870,11 @@ function arrow(ctx, tailX, tailY, headX, headY, color, label) {
   ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 8;
   ctx.beginPath(); ctx.moveTo(tailX, tailY); ctx.lineTo(headX, headY); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(headX, headY); ctx.lineTo(headX - headSize * Math.cos(angle - .5), headY - headSize * Math.sin(angle - .5)); ctx.lineTo(headX - headSize * Math.cos(angle + .5), headY - headSize * Math.sin(angle + .5)); ctx.closePath(); ctx.fill();
-  if (label) { ctx.font = "800 21px system-ui"; ctx.fillStyle = "white"; ctx.fillText(label, headX + 12, headY - 8); }
+  if (label) { ctx.font = `800 ${canvasFontSize(label, 21, true)}px system-ui`; ctx.fillStyle = "white"; ctx.fillText(label, headX + 12, headY - 8); }
 }
 
 function dot(ctx, x, y, color, radius = 10) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); }
-function label(ctx, text, x, y, color = "white", size = 20) { ctx.fillStyle = color; ctx.font = `800 ${size}px system-ui`; ctx.fillText(text, x, y); }
+function label(ctx, text, x, y, color = "white", size = 20) { ctx.fillStyle = color; ctx.font = `800 ${canvasFontSize(text, size)}px system-ui`; ctx.fillText(text, x, y); }
 function forceArrow(ctx, tailX, tailY, headX, headY, color, text) {
   dot(ctx, tailX, tailY, "rgba(248,251,255,.95)", 8);
   dot(ctx, tailX, tailY, color, 5);
@@ -1024,7 +1135,25 @@ function drawExpansionVisual(ctx, type, evidence, revealed, w, h) {
 }
 
 function evidenceCaption(ctx, text, color = "#a1fff5") {
-  label(ctx, text, 145, 505, color, 20);
+  const size = canvasFontSize(text, 20, true);
+  const maxWidth = 730;
+  const parts = String(text).split(/(?<=[；｜。])/).filter(Boolean);
+  const lines = [];
+  let current = "";
+  for (const part of parts.length ? parts : [String(text)]) {
+    const candidate = current + part;
+    ctx.font = `800 ${size}px system-ui`;
+    if (current && ctx.measureText?.(candidate).width > maxWidth) {
+      lines.push(current);
+      current = part;
+    } else current = candidate;
+  }
+  if (current) lines.push(current);
+  if (lines.length === 1 && ctx.measureText?.(lines[0]).width > maxWidth) {
+    const midpoint = Math.ceil(lines[0].length / 2);
+    lines.splice(0, 1, lines[0].slice(0, midpoint), lines[0].slice(midpoint));
+  }
+  lines.slice(0, 2).forEach((lineText, index) => label(ctx, lineText, 145, 486 + index * Math.min(size * 1.08, 48), color, 20));
 }
 
 function drawCart(ctx, x, y, color, width = 130) {
